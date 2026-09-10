@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Acro FPV — Drone Racing Simulator</title>
+<style>
+  :root {
+    --hud: #6ef2c0;
+    --hud-dim: rgba(110, 242, 192, 0.55);
+    --warn: #ff5b5b;
+    --ok: #7dff8a;
+    --panel: rgba(6, 14, 18, 0.72);
+    --line: rgba(110, 242, 192, 0.25);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: #05080b;
+    color: var(--hud);
+    font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+  }
+  canvas { display: block; }
+  #scene, #hud {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #hud { pointer-events: none; }
+
+  .panel {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+  }
+
+  /* --- top left: status --- */
+  #status { top: 12px; left: 12px; min-width: 210px; }
+  #status .row { display: flex; justify-content: space-between; gap: 16px; }
+  #status .label { color: var(--hud-dim); }
+  .pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .pill.armed { color: var(--warn); animation: pulse 1.1s ease-in-out infinite; }
+  .pill.safe { color: var(--hud-dim); }
+  @keyframes pulse { 50% { opacity: 0.45; } }
+
+  /* --- top right: input + race --- */
+  #inputbox { top: 12px; right: 12px; min-width: 230px; }
+  #inputbox .mode {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+  #inputbox .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--hud);
+    box-shadow: 0 0 10px currentColor;
+  }
+  #inputbox.gamepad .dot { background: #8fd0ff; color: #8fd0ff; }
+  #inputbox.gamepad .mode { color: #8fd0ff; }
+  #padname {
+    color: var(--hud-dim);
+    font-size: 11px;
+    margin-top: 4px;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #race { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+  #race .row { display: flex; justify-content: space-between; gap: 16px; }
+  #race .label { color: var(--hud-dim); }
+
+  /* --- bottom left: help --- */
+  #help { bottom: 12px; left: 12px; max-width: 340px; }
+  #help h2 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--hud-dim);
+  }
+  #help table { border-collapse: collapse; width: 100%; }
+  #help td { padding: 1px 0; vertical-align: top; }
+  #help td.k { color: #cfe9e0; white-space: nowrap; padding-right: 10px; }
+  #help .sec { color: var(--hud-dim); padding-top: 6px; letter-spacing: 0.1em; }
+  #help.collapsed .body { display: none; }
+  #helptoggle {
+    pointer-events: auto;
+    cursor: pointer;
+    float: right;
+    color: var(--hud-dim);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 6px;
+    margin: -2px 0 0 8px;
+  }
+
+  /* --- center toast --- */
+  #toast {
+    position: fixed;
+    left: 50%;
+    top: 22%;
+    transform: translate(-50%, -50%);
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.25s;
+    text-shadow: 0 0 18px rgba(0, 0, 0, 0.95);
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+
+  /* --- boot / error --- */
+  #boot {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    background: #05080b;
+    text-align: center;
+    padding: 24px;
+    z-index: 10;
+  }
+  #boot h1 { font-size: 18px; letter-spacing: 0.3em; margin: 0; }
+  #boot p { color: var(--hud-dim); max-width: 460px; margin: 0; }
+  #boot.hide { display: none; }
+  .err { color: var(--warn); }
+
+  @media (max-width: 720px) {
+    body { font-size: 11px; }
+    #help { display: none; }
+    #status, #inputbox { min-width: 0; padding: 7px 9px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<canvas id="hud"></canvas>
+
+<div id="boot">
+  <h1>ACRO FPV</h1>
+  <p id="bootmsg">Loading renderer&hellip;</p>
+</div>
+
+<div class="panel" id="status" hidden>
+  <div class="row"><span class="label">STATE</span><span id="armpill" class="pill safe">DISARMED</span></div>
+  <div class="row"><span class="label">THROTTLE</span><span id="thr">0%</span></div>
+  <div class="row"><span class="label">SPEED</span><span id="spd">0.0 m/s</span></div>
+  <div class="row"><span class="label">ALT</span><span id="alt">0.0 m</span></div>
+  <div class="row"><span class="label">CAMERA</span><span id="cam">FPV</span></div>
+</div>
+
+<div class="panel" id="inputbox" hidden>
+  <div class="mode"><span class="dot"></span><span id="inputmode">KEYBOARD</span></div>
+  <div id="padname">No gamepad detected — keyboard active</div>
+  <div id="race">
+    <div class="row"><span class="label">NEXT GATE</span><span id="gateinfo">1 / 6</span></div>
+    <div class="row"><span class="label">LAP</span><span id="laptime">--.--</span></div>
+    <div class="row"><span class="label">BEST</span><span id="besttime">--.--</span></div>
+  </div>
+</div>
+
+<div class="panel" id="help" hidden>
+  <span id="helptoggle">H</span>
+  <h2>Controls</h2>
+  <div class="body">
+    <table>
+      <tr><td class="sec" colspan="2">KEYBOARD</td></tr>
+      <tr><td class="k">W / S &nbsp;or&nbsp; &uarr;/&darr;</td><td>Pitch forward / back</td></tr>
+      <tr><td class="k">A / D &nbsp;or&nbsp; &larr;/&rarr;</td><td>Roll left / right</td></tr>
+      <tr><td class="k">Q / E</td><td>Yaw left / right</td></tr>
+      <tr><td class="k">Shift / Ctrl</td><td>Throttle up / down</td></tr>
+      <tr><td class="k">Space</td><td>Arm / disarm</td></tr>
+      <tr><td class="k">R</td><td>Reset drone</td></tr>
+      <tr><td class="sec" colspan="2">GAMEPAD (Mode 2)</td></tr>
+      <tr><td class="k">Left stick</td><td>Throttle / yaw</td></tr>
+      <tr><td class="k">Right stick</td><td>Pitch / roll</td></tr>
+      <tr><td class="k">&#10005; / A</td><td>Arm / disarm</td></tr>
+      <tr><td class="k">&#9711; / B</td><td>Reset drone</td></tr>
+      <tr><td class="k">&#9651; / Y</td><td>Camera view</td></tr>
+      <tr><td class="k">Options / Start</td><td>Restart lap timing</td></tr>
+      <tr><td class="sec" colspan="2">GENERAL</td></tr>
+      <tr><td class="k">C</td><td>FPV / chase camera</td></tr>
+      <tr><td class="k">T</td><td>Throttle: absolute / ramped</td></tr>
+      <tr><td class="k">[ / ]</td><td>Camera uptilt</td></tr>
+      <tr><td class="k">H</td><td>Hide this panel</td></tr>
+    </table>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ------------------------------------------------------------------ *
+ * Three.js loader: cdnjs first, jsDelivr as fallback.
+ * ------------------------------------------------------------------ */
+(function loadThree() {
+  var sources = [
+    'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+    'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'
+  ];
+  var msg = document.getElementById('bootmsg');
+  var i = 0;
+  (function next() {
+    if (i >= sources.length) {
+      msg.className = 'err';
+      msg.textContent = 'Could not load Three.js from any CDN. Check your network connection and reload.';
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = sources[i++];
+    s.onload = function () {
+      if (!window.THREE) { next(); return; }
+      try { start(); } catch (e) {
+        msg.className = 'err';
+        msg.textContent = 'Startup failed: ' + e.message;
+        throw e;
+      }
+    };
+    s.onerror = next;
+    document.head.appendChild(s);
+  })();
+})();
+
+/* ================================================================== *
+ * TUNING
+ * ================================================================== */
+var CFG = {
+  // Rate mode (acro) — commanded angular rates, degrees/second at full stick.
+  rate: { pitch: 620, roll: 700, yaw: 380 },
+  expo: { pitch: 0.42, roll: 0.42, yaw: 0.35 },
+  deadzone: 0.09,
+  // Rotational momentum: time constant to reach a commanded rate (seconds).
+  // Lower = snappier. Yaw is heavier because it fights prop inertia.
+  tau: { pitch: 0.045, roll: 0.040, yaw: 0.075 },
+  // Rate decay when disarmed (props stopped, air friction only).
+  idleAngDamp: 1.6,
+
+  maxThrust: 26.0,        // m/s^2 at 100% throttle (~2.65 g)
+  gravity: 9.81,
+  dragLinear: 0.16,       // per second
+  dragQuad: 0.0125,       // per (m/s)
+  thrustSpool: 0.06,      // motor spool-up time constant (seconds)
+
+  throttleRampUp: 1.15,   // keyboard / ramped mode, units per second
+  throttleRampDown: 1.35,
+
+  groundY: 0.13,          // drone rest height
+  crashSpeed: 9.0,        // impact speed that disarms
+  bounce: 0.22,
+  friction: 0.72,
+
+  camTilt: 22 * Math.PI / 180,   // FPV camera uptilt
+  fpvFov: 105,
+  chaseFov: 72,
+  start: { x: 0, y: 0.13, z: 8, yaw: 0 }
+};
+
+/* ================================================================== *
+ * INPUT — keyboard + Gamepad API, fully interchangeable
+ * ================================================================== */
+var Input = {
+  active: 'keyboard',       // which device last produced meaningful input
+  padIndex: null,
+  padName: '',
+  keys: Object.create(null),
+  // Normalised control outputs, -1..1 (throttle 0..1)
+  ctl: { throttle: 0, yaw: 0, pitch: 0, roll: 0 },
+  throttleMode: 'absolute', // gamepad default; keyboard always ramps
+  edges: { arm: false, reset: false, camera: false, restart: false },
+  _prevButtons: [],
+  _kbdThrottle: 0,
+
+  init: function (hooks) {
+    this.hooks = hooks;
+    var self = this;
+
+    window.addEventListener('keydown', function (e) {
+      if (e.repeat) { blockScroll(e); return; }
+      self.keys[e.code] = true;
+      self.setActive('keyboard');
+      switch (e.code) {
+        case 'Space':   hooks.toggleArm(); break;
+        case 'KeyR':    hooks.reset(); break;
+        case 'KeyC':    hooks.toggleCamera(); break;
+        case 'KeyT':    hooks.toggleThrottleMode(); break;
+        case 'KeyH':    hooks.toggleHelp(); break;
+        case 'Enter':   hooks.restartRace(); break;
+        case 'BracketLeft':  hooks.tiltCamera(-1); break;
+        case 'BracketRight': hooks.tiltCamera(1); break;
+      }
+      blockScroll(e);
+    });
+
+    window.addEventListener('keyup', function (e) { self.keys[e.code] = false; });
+    window.addEventListener('blur', function () { self.keys = Object.create(null); });
+
+    function blockScroll(e) {
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
+    }
+
+    window.addEventListener('gamepadconnected', function (e) {
+      self.padIndex = e.gamepad.index;
+      self.padName = e.gamepad.id;
+      self.setActive('gamepad');
+      hooks.toast('GAMEPAD CONNECTED', '#8fd0ff');
+    });
+    window.addEventListener('gamepaddisconnected', function (e) {
+      if (self.padIndex === e.gamepad.index) {
+        self.padIndex = null;
+        self.padName = '';
+        self.setActive('keyboard');
+        hooks.toast('GAMEPAD DISCONNECTED — KEYBOARD ACTIVE', '#6ef2c0');
+      }
+    });
+  },
+
+  setActive: function (mode) {
+    if (this.active === mode) return;
+    this.active = mode;
+    // Hand over the current throttle in flight, but start from zero on the
+    // ground so a centred gamepad stick doesn't leave keyboard at 50%.
+    if (this.hooks && this.hooks.isArmed && !this.hooks.isArmed()) {
+      this._kbdThrottle = 0;
+      this.ctl.throttle = 0;
+    }
+    if (this.hooks) this.hooks.inputChanged();
+  },
+
+  getPad: function () {
+    if (!navigator.getGamepads) return null;
+    var pads = navigator.getGamepads();
+    if (!pads) return null;
+    // Prefer the remembered pad, otherwise adopt the first connected one.
+    if (this.padIndex !== null && pads[this.padIndex]) return pads[this.padIndex];
+    for (var i = 0; i < pads.length; i++) {
+      if (pads[i] && pads[i].connected) {
+        this.padIndex = pads[i].index;
+        this.padName = pads[i].id;
+        return pads[i];
+      }
+    }
+    this.padIndex = null;
+    return null;
+  },
+
+  update: function (dt) {
+    var e = this.edges;
+    e.arm = e.reset = e.camera = e.restart = false;
+
+    var pad = this.getPad();
+    var padActive = false;
+
+    if (pad) {
+      if (this.padName !== pad.id) this.padName = pad.id;
+      var lx = curve(dz(pad.axes[0] || 0), CFG.expo.yaw);
+      var ly = dz(pad.axes[1] || 0);
+      var rx = curve(dz(pad.axes[2] || 0), CFG.expo.roll);
+      var ry = curve(dz(pad.axes[3] || 0), CFG.expo.pitch);
+
+      // Any stick off-centre or button press claims "active input".
+      padActive = Math.abs(lx) > 0.02 || Math.abs(ly) > 0.02 ||
+                  Math.abs(rx) > 0.02 || Math.abs(ry) > 0.02;
+
+      for (var b = 0; b < pad.buttons.length; b++) {
+        var pressed = !!(pad.buttons[b] && pad.buttons[b].pressed);
+        var was = !!this._prevButtons[b];
+        if (pressed) padActive = true;
+        if (pressed && !was) {
+          if (b === 0) e.arm = true;         // Cross / A
+          else if (b === 1) e.reset = true;  // Circle / B
+          else if (b === 3) e.camera = true; // Triangle / Y
+          else if (b === 9) e.restart = true;// Options / Start
+        }
+        this._prevButtons[b] = pressed;
+      }
+
+      if (padActive) this.setActive('gamepad');
+
+      if (this.active === 'gamepad') {
+        this.ctl.yaw = lx;
+        this.ctl.roll = rx;
+        this.ctl.pitch = -ry;              // stick back (+axis) = nose up
+        var stickThrottle = (-ly + 1) / 2; // -1 (up) .. 1 (down) -> 1 .. 0
+        if (this.throttleMode === 'absolute') {
+          this._kbdThrottle = this.ctl.throttle = clamp(stickThrottle, 0, 1);
+        } else {
+          var d = stickThrottle - 0.5;
+          if (Math.abs(d) > CFG.deadzone / 2) {
+            this._kbdThrottle += d * 2 * (d > 0 ? CFG.throttleRampUp : CFG.throttleRampDown) * dt;
+          }
+          this.ctl.throttle = this._kbdThrottle = clamp(this._kbdThrottle, 0, 1);
+        }
+        return;
+      }
+    }
+
+    // ---- keyboard ----
+    var k = this.keys;
+    var pitch = (down(k, 'KeyW', 'ArrowUp') ? 1 : 0) - (down(k, 'KeyS', 'ArrowDown') ? 1 : 0);
+    var roll  = (down(k, 'KeyD', 'ArrowRight') ? 1 : 0) - (down(k, 'KeyA', 'ArrowLeft') ? 1 : 0);
+    var yaw   = (down(k, 'KeyE') ? 1 : 0) - (down(k, 'KeyQ') ? 1 : 0);
+    var up    = down(k, 'ShiftLeft', 'ShiftRight');
+    var dn    = down(k, 'ControlLeft', 'ControlRight');
+
+    if (up) this._kbdThrottle += CFG.throttleRampUp * dt;
+    if (dn) this._kbdThrottle -= CFG.throttleRampDown * dt;
+    this._kbdThrottle = clamp(this._kbdThrottle, 0, 1);
+
+    // Keys are digital: ease them so the quad doesn't snap to full rate.
+    this.ctl.pitch = approach(this.ctl.pitch, pitch, dt, 0.055);
+    this.ctl.roll  = approach(this.ctl.roll, roll, dt, 0.055);
+    this.ctl.yaw   = approach(this.ctl.yaw, yaw, dt, 0.075);
+    this.ctl.throttle = this._kbdThrottle;
+
+    function down(keys) {
+      for (var i = 1; i < arguments.length; i++) if (keys[arguments[i]]) return true;
+      return false;
+    }
+  }
+};
+
+function dz(v) {
+  var d = CFG.deadzone;
+  if (Math.abs(v) < d) return 0;
+  return (v - Math.sign(v) * d) / (1 - d);
+}
+function curve(x, expo) { return (1 - expo) * x + expo * x * x * x; }
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function approach(cur, target, dt, tau) {
+  var a = 1 - Math.exp(-dt / tau);
+  return cur + (target - cur) * a;
+}
+
+/* ================================================================== *
+ * MAIN
+ * ================================================================== */
+function start() {
+  var THREE = window.THREE;
+
+  /* ---------------- renderer / scene ---------------- */
+  var renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('scene'), antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  var scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x9fc3d8, 90, 620);
+
+  var camera = new THREE.PerspectiveCamera(CFG.fpvFov, window.innerWidth / window.innerHeight, 0.05, 2000);
+  scene.add(camera);
+
+  // Sky dome (simple vertical gradient).
+  var sky = new THREE.Mesh(
+    new THREE.SphereGeometry(900, 32, 20),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: {
+        top: { value: new THREE.Color(0x2a6fb0) },
+        mid: { value: new THREE.Color(0x9fc3d8) },
+        bot: { value: new THREE.Color(0xd8cbb0) }
+      },
+      vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: [
+        'uniform vec3 top; uniform vec3 mid; uniform vec3 bot; varying vec3 vP;',
+        'void main(){',
+        '  float h = normalize(vP).y;',
+        '  vec3 c = h > 0.0 ? mix(mid, top, pow(h, 0.6)) : mix(mid, bot, pow(-h, 0.5));',
+        '  gl_FragColor = vec4(c, 1.0);',
+        '}'
+      ].join('\n')
+    })
+  );
+  scene.add(sky);
+
+  scene.add(new THREE.HemisphereLight(0xbcd8ee, 0x4a4437, 0.85));
+  var sun = new THREE.DirectionalLight(0xfff2dc, 1.05);
+  sun.position.set(60, 90, 40);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  var sc = sun.shadow.camera;
+  sc.near = 10; sc.far = 320; sc.left = -110; sc.right = 110; sc.top = 110; sc.bottom = -110;
+  scene.add(sun);
+
+  /* ---------------- ground ---------------- */
+  function gridTexture() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 256;
+    var g = c.getContext('2d');
+    g.fillStyle = '#5d6b4a';
+    g.fillRect(0, 0, 256, 256);
+    g.fillStyle = '#66754f';
+    for (var i = 0; i < 220; i++) {
+      var x = Math.random() * 256, y = Math.random() * 256, r = 2 + Math.random() * 7;
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    }
+    g.strokeStyle = 'rgba(230,240,220,0.22)';
+    g.lineWidth = 2;
+    g.strokeRect(0, 0, 256, 256);
+    return c;
+  }
+  var groundTex = new THREE.CanvasTexture(gridTexture());
+  groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
+  groundTex.repeat.set(160, 160);
+  var ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(1600, 1600),
+    new THREE.MeshLambertMaterial({ map: groundTex })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Launch pad, so you always know where "home" is.
+  var pad = new THREE.Mesh(
+    new THREE.CircleGeometry(2.2, 40),
+    new THREE.MeshLambertMaterial({ color: 0x1d2430 })
+  );
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.set(CFG.start.x, 0.02, CFG.start.z);
+  pad.receiveShadow = true;
+  scene.add(pad);
+  var padRing = new THREE.Mesh(
+    new THREE.RingGeometry(1.9, 2.2, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffc042, side: THREE.DoubleSide })
+  );
+  padRing.rotation.x = -Math.PI / 2;
+  padRing.position.set(CFG.start.x, 0.03, CFG.start.z);
+  scene.add(padRing);
+
+  /* ---------------- race course ---------------- */
+  // Each gate: centre, yaw (course direction through it), ring radius.
+  var GATE_DEFS = [
+    { x: 0,   y: 3.0, z: -14,  yaw: 0,             r: 3.2 },
+    { x: 22,  y: 4.5, z: -38,  yaw: -Math.PI * 0.28, r: 3.0 },
+    { x: 48,  y: 2.6, z: -14,  yaw: -Math.PI * 0.62, r: 3.0 },
+    { x: 40,  y: 6.5, z: 26,   yaw: -Math.PI * 0.92, r: 3.4 },
+    { x: 4,   y: 3.2, z: 40,   yaw: Math.PI * 0.78,  r: 3.0 },
+    { x: -20, y: 5.0, z: 18,   yaw: Math.PI * 0.34,  r: 3.2 }
+  ];
+
+  var gates = [];
+  GATE_DEFS.forEach(function (d, i) {
+    var g = new THREE.Group();
+    g.position.set(d.x, d.y, d.z);
+    g.rotation.y = d.yaw;
+
+    var ring = new THREE.Mesh(
+      new THREE.TorusGeometry(d.r, 0.16, 10, 44),
+      new THREE.MeshLambertMaterial({ color: 0x2b3446 })
+    );
+    ring.castShadow = true;
+    g.add(ring);
+
+    // Glowing inner band shows which gate is next.
+    var glow = new THREE.Mesh(
+      new THREE.TorusGeometry(d.r - 0.2, 0.07, 8, 44),
+      new THREE.MeshBasicMaterial({ color: 0x39506e })
+    );
+    g.add(glow);
+
+    // Legs down to the ground so gates read as objects in space.
+    for (var s = -1; s <= 1; s += 2) {
+      var legH = Math.max(0.1, d.y - d.r * 0.75);
+      var leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.09, 0.12, legH, 8),
+        new THREE.MeshLambertMaterial({ color: 0x2b3446 })
+      );
+      leg.position.set(s * d.r * 0.72, -d.y + legH / 2, 0);
+      leg.castShadow = true;
+      g.add(leg);
+    }
+
+    scene.add(g);
+
+    var normal = new THREE.Vector3(Math.sin(d.yaw), 0, Math.cos(d.yaw));
+    gates.push({
+      def: d, group: g, glow: glow,
+      centre: new THREE.Vector3(d.x, d.y, d.z),
+      normal: normal, radius: d.r,
+      index: i, prevSide: 0
+    });
+  });
+
+  // Obstacles: pylons to weave through + distant blocks for depth cues.
+  var pylons = [];
+  [[10, -26, 7], [32, -26, 6], [26, 4, 9], [-8, 6, 5], [18, 32, 8], [-14, -6, 6]].forEach(function (p) {
+    var h = p[2];
+    var m = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.45, 0.6, h, 12),
+      new THREE.MeshLambertMaterial({ color: 0xd8452f })
+    );
+    m.position.set(p[0], h / 2, p[1]);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    scene.add(m);
+    var band = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.62, 0.62, 0.8, 12),
+      new THREE.MeshLambertMaterial({ color: 0xf2f2f2 })
+    );
+    band.position.set(p[0], h * 0.65, p[1]);
+    scene.add(band);
+    pylons.push({ x: p[0], z: p[1], h: h, r: 0.62 });
+  });
+
+  var blockMat = new THREE.MeshLambertMaterial({ color: 0x8a8f98 });
+  for (var b = 0; b < 26; b++) {
+    var ang = (b / 26) * Math.PI * 2 + Math.random() * 0.2;
+    var dist = 130 + Math.random() * 220;
+    var w = 8 + Math.random() * 16, hh = 10 + Math.random() * 40, dd = 8 + Math.random() * 16;
+    var blk = new THREE.Mesh(new THREE.BoxGeometry(w, hh, dd), blockMat);
+    blk.position.set(Math.cos(ang) * dist, hh / 2, Math.sin(ang) * dist);
+    blk.rotation.y = Math.random() * Math.PI;
+    blk.castShadow = true;
+    blk.receiveShadow = true;
+    scene.add(blk);
+  }
+
+  /* ---------------- drone model ---------------- */
+  var drone = new THREE.Group();
+  scene.add(drone);
+
+  var bodyMat = new THREE.MeshLambertMaterial({ color: 0x1b1f26 });
+  var armMat = new THREE.MeshLambertMaterial({ color: 0x33383f });
+  var body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.09, 0.34), bodyMat);
+  body.castShadow = true;
+  drone.add(body);
+
+  // Camera pod, angled up like a real FPV cam.
+  var pod = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.11, 0.1), new THREE.MeshLambertMaterial({ color: 0x111418 }));
+  pod.position.set(0, 0.08, -0.12);
+  pod.rotation.x = CFG.camTilt;
+  drone.add(pod);
+  var lens = new THREE.Mesh(new THREE.CircleGeometry(0.035, 12), new THREE.MeshBasicMaterial({ color: 0x63d9ff }));
+  lens.position.set(0, 0.09, -0.17);
+  lens.rotation.x = CFG.camTilt;
+  drone.add(lens);
+
+  var props = [];
+  var armPositions = [[0.19, 0.19], [-0.19, 0.19], [-0.19, -0.19], [0.19, -0.19]];
+  armPositions.forEach(function (a, idx) {
+    var ax = a[0], az = a[1];
+    var arm = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.03, 0.28), armMat);
+    arm.position.set(ax / 2, 0, az / 2);
+    arm.rotation.y = Math.atan2(ax, az);
+    arm.castShadow = true;
+    drone.add(arm);
+
+    var motor = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.05, 10), armMat);
+    motor.position.set(ax, 0.04, az);
+    drone.add(motor);
+
+    var prop = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.006, 0.03),
+      new THREE.MeshLambertMaterial({
+        color: idx % 2 ? 0x6ef2c0 : 0xff9c3f,
+        transparent: true, opacity: 0.85
+      })
+    );
+    prop.position.set(ax, 0.07, az);
+    drone.add(prop);
+    props.push({ mesh: prop, dir: idx % 2 ? 1 : -1 });
+  });
+
+  // Tail LED: green when armed, dim when safe.
+  var led = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), new THREE.MeshBasicMaterial({ color: 0x224433 }));
+  led.position.set(0, 0.06, 0.18);
+  drone.add(led);
+
+  /* ---------------- flight state ---------------- */
+  var st = {
+    pos: new THREE.Vector3(CFG.start.x, CFG.start.y, CFG.start.z),
+    vel: new THREE.Vector3(),
+    quat: new THREE.Quaternion(),
+    omega: new THREE.Vector3(),   // body rates: x=pitch, y=yaw, z=roll (rad/s)
+    armed: false,
+    motor: 0,                     // spooled thrust 0..1
+    crashes: 0
+  };
+  resetDrone(true);
+
+  var race = {
+    next: 0, lap: 0, lapStart: null, lastLap: null, best: null, started: false
+  };
+
+  /* ---------------- camera state ---------------- */
+  var camMode = 'FPV';
+  var camTilt = CFG.camTilt;
+  var chasePos = new THREE.Vector3();
+  var chaseInit = false;
+
+  /* ---------------- UI wiring ---------------- */
+  var ui = {
+    status: document.getElementById('status'),
+    inputbox: document.getElementById('inputbox'),
+    help: document.getElementById('help'),
+    armpill: document.getElementById('armpill'),
+    thr: document.getElementById('thr'),
+    spd: document.getElementById('spd'),
+    alt: document.getElementById('alt'),
+    cam: document.getElementById('cam'),
+    inputmode: document.getElementById('inputmode'),
+    padname: document.getElementById('padname'),
+    gateinfo: document.getElementById('gateinfo'),
+    laptime: document.getElementById('laptime'),
+    besttime: document.getElementById('besttime'),
+    toast: document.getElementById('toast')
+  };
+  ['status', 'inputbox', 'help'].forEach(function (k) { ui[k].hidden = false; });
+  document.getElementById('boot').classList.add('hide');
+  document.getElementById('helptoggle').addEventListener('click', toggleHelp);
+
+  var toastTimer = null;
+  function toast(text, color) {
+    ui.toast.textContent = text;
+    ui.toast.style.color = color || '#6ef2c0';
+    ui.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { ui.toast.classList.remove('show'); }, 1400);
+  }
+
+  function toggleArm() {
+    if (!st.armed) {
+      if (Input.ctl.throttle > 0.12) { toast('LOWER THROTTLE TO ARM', '#ffb03f'); return; }
+      st.armed = true;
+      toast('ARMED', '#ff5b5b');
+    } else {
+      st.armed = false;
+      toast('DISARMED', '#6ef2c0');
+    }
+    updateStatusChrome();
+  }
+
+  function resetDrone(silent) {
+    st.pos.set(CFG.start.x, CFG.start.y, CFG.start.z);
+    st.vel.set(0, 0, 0);
+    st.omega.set(0, 0, 0);
+    st.quat.setFromEuler(new THREE.Euler(0, CFG.start.yaw, 0));
+    st.motor = 0;
+    chaseInit = false;
+    if (!silent) toast('RESET', '#6ef2c0');
+  }
+
+  function restartRace() {
+    race.next = 0; race.lap = 0; race.lapStart = null; race.lastLap = null; race.started = false;
+    gates.forEach(function (g) { g.prevSide = 0; });
+    toast('LAP TIMING RESET', '#6ef2c0');
+  }
+
+  function toggleCamera() {
+    camMode = camMode === 'FPV' ? 'CHASE' : 'FPV';
+    camera.fov = camMode === 'FPV' ? CFG.fpvFov : CFG.chaseFov;
+    camera.updateProjectionMatrix();
+    chaseInit = false;
+    ui.cam.textContent = camMode;
+  }
+
+  function toggleThrottleMode() {
+    Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute';
+    toast('THROTTLE: ' + Input.throttleMode.toUpperCase(), '#6ef2c0');
+  }
+
+  function tiltCamera(dir) {
+    camTilt = clamp(camTilt + dir * 3 * Math.PI / 180, 0, 55 * Math.PI / 180);
+    pod.rotation.x = lens.rotation.x = camTilt;
+    toast('CAM TILT ' + Math.round(camTilt * 180 / Math.PI) + '°', '#6ef2c0');
+  }
+
+  function toggleHelp() { ui.help.classList.toggle('collapsed'); }
+
+  function updateStatusChrome() {
+    ui.armpill.textContent = st.armed ? 'ARMED' : 'DISARMED';
+    ui.armpill.className = 'pill ' + (st.armed ? 'armed' : 'safe');
+    led.material.color.setHex(st.armed ? 0x54ff8a : 0x224433);
+  }
+
+  function inputChanged() {
+    var gp = Input.active === 'gamepad';
+    ui.inputbox.classList.toggle('gamepad', gp);
+    ui.inputmode.textContent = gp ? 'GAMEPAD' : 'KEYBOARD';
+    ui.padname.textContent = gp
+      ? (Input.padName || 'Gamepad')
+      : (Input.padIndex !== null
+          ? 'Gamepad idle (' + (Input.padName || 'connected') + ') — move a stick to switch'
+          : 'No gamepad detected — keyboard active');
+  }
+
+  Input.init({
+    toggleArm: toggleArm,
+    reset: function () { resetDrone(false); },
+    toggleCamera: toggleCamera,
+    toggleThrottleMode: toggleThrottleMode,
+    toggleHelp: toggleHelp,
+    restartRace: restartRace,
+    tiltCamera: tiltCamera,
+    toast: toast,
+    inputChanged: inputChanged,
+    isArmed: function () { return st.armed; }
+  });
+
+  // Debug handle (used by the automated smoke test; harmless at runtime).
+  window.__sim = { st: st, race: race, gates: gates, cfg: CFG, input: Input };
+  updateStatusChrome();
+  inputChanged();
+
+  /* ---------------- HUD canvas ---------------- */
+  var hudCanvas = document.getElementById('hud');
+  var hx = hudCanvas.getContext('2d');
+
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    hudCanvas.width = Math.floor(w * dpr);
+    hudCanvas.height = Math.floor(h * dpr);
+    hx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* ---------------- physics ---------------- */
+  var _up = new THREE.Vector3();
+  var _fwd = new THREE.Vector3();
+  var _right = new THREE.Vector3();
+  var _axis = new THREE.Vector3();
+  var _dq = new THREE.Quaternion();
+
+  function stepPhysics(dt) {
+    var c = Input.ctl;
+
+    // --- rotational dynamics (acro / rate mode) ---
+    var target = new THREE.Vector3(
+      c.pitch * CFG.rate.pitch * Math.PI / 180,
+      -c.yaw * CFG.rate.yaw * Math.PI / 180,   // +yaw stick = nose right = -Y rotation
+      -c.roll * CFG.rate.roll * Math.PI / 180  // +roll stick = right roll = -Z rotation
+    );
+
+    if (st.armed) {
+      // First-order lag toward the commanded rate = rotational momentum.
+      st.omega.x += (target.x - st.omega.x) * (1 - Math.exp(-dt / CFG.tau.pitch));
+      st.omega.y += (target.y - st.omega.y) * (1 - Math.exp(-dt / CFG.tau.yaw));
+      st.omega.z += (target.z - st.omega.z) * (1 - Math.exp(-dt / CFG.tau.roll));
+    } else {
+      st.omega.multiplyScalar(Math.exp(-CFG.idleAngDamp * dt));
+    }
+
+    var mag = st.omega.length();
+    if (mag > 1e-7) {
+      _axis.copy(st.omega).divideScalar(mag);
+      _dq.setFromAxisAngle(_axis, mag * dt);
+      st.quat.multiply(_dq).normalize();   // body-frame rotation
+    }
+
+    // --- thrust with motor spool ---
+    var demand = st.armed ? c.throttle : 0;
+    st.motor += (demand - st.motor) * (1 - Math.exp(-dt / CFG.thrustSpool));
+
+    _up.set(0, 1, 0).applyQuaternion(st.quat);
+    var acc = _up.clone().multiplyScalar(st.motor * CFG.maxThrust);
+    acc.y -= CFG.gravity;
+
+    // --- drag: linear + quadratic, isotropic ---
+    var speed = st.vel.length();
+    if (speed > 1e-5) {
+      var dragMag = CFG.dragLinear + CFG.dragQuad * speed;
+      acc.addScaledVector(st.vel, -dragMag);
+    }
+
+    st.vel.addScaledVector(acc, dt);
+    st.pos.addScaledVector(st.vel, dt);
+
+    collide(dt);
+    checkGates();
+  }
+
+  function crash(impact) {
+    st.crashes++;
+    if (impact > CFG.crashSpeed && st.armed) {
+      st.armed = false;
+      updateStatusChrome();
+      toast('CRASHED — DISARMED', '#ff5b5b');
+    }
+  }
+
+  function collide(dt) {
+    // Ground
+    if (st.pos.y < CFG.groundY) {
+      var impact = -st.vel.y;
+      st.pos.y = CFG.groundY;
+      if (st.vel.y < 0) {
+        if (impact > 1.2) crash(impact);
+        st.vel.y = -st.vel.y * CFG.bounce;
+        if (Math.abs(st.vel.y) < 0.4) st.vel.y = 0;
+      }
+      // Ground friction + settle attitude when parked.
+      st.vel.x *= CFG.friction;
+      st.vel.z *= CFG.friction;
+      if (!st.armed) {
+        st.omega.multiplyScalar(0.85);
+        var flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yawOf(st.quat), 0));
+        st.quat.slerp(flat, Math.min(1, dt * 4));
+      }
+    }
+
+    // Pylons (vertical cylinders)
+    for (var i = 0; i < pylons.length; i++) {
+      var p = pylons[i];
+      if (st.pos.y > p.h + 0.2) continue;
+      var dx = st.pos.x - p.x, dz = st.pos.z - p.z;
+      var d = Math.hypot(dx, dz);
+      var minD = p.r + 0.22;
+      if (d < minD && d > 1e-4) {
+        var nx = dx / d, nz = dz / d;
+        st.pos.x = p.x + nx * minD;
+        st.pos.z = p.z + nz * minD;
+        var vn = st.vel.x * nx + st.vel.z * nz;
+        if (vn < 0) {
+          st.vel.x -= (1 + CFG.bounce) * vn * nx;
+          st.vel.z -= (1 + CFG.bounce) * vn * nz;
+          crash(-vn);
+        }
+      }
+    }
+  }
+
+  var _rel = new THREE.Vector3();
+  function checkGates() {
+    for (var i = 0; i < gates.length; i++) {
+      var g = gates[i];
+      _rel.copy(st.pos).sub(g.centre);
+      var side = _rel.dot(g.normal);
+      var radial = Math.sqrt(Math.max(0, _rel.lengthSq() - side * side));
+
+      // Clipping the ring itself counts as a hit.
+      if (Math.abs(side) < 0.4 && Math.abs(radial - g.radius) < 0.4) {
+        crash(st.vel.length());
+        var push = _rel.clone().addScaledVector(g.normal, -side);
+        if (push.lengthSq() > 1e-6) {
+          push.normalize().multiplyScalar(radial > g.radius ? 0.35 : -0.35);
+          st.pos.add(push);
+          st.vel.multiplyScalar(0.4);
+        }
+      }
+
+      if (g.prevSide !== 0 && radial < g.radius - 0.25) {
+        // Crossing the gate plane in the course direction.
+        if (g.prevSide < 0 && side >= 0 && i === race.next) passGate(i);
+      }
+      g.prevSide = side < 0 ? -1 : 1;
+    }
+  }
+
+  function passGate(i) {
+    var now = performance.now();
+    if (i === 0) {
+      if (race.started && race.lapStart !== null) {
+        race.lastLap = (now - race.lapStart) / 1000;
+        race.lap++;
+        if (race.best === null || race.lastLap < race.best) {
+          race.best = race.lastLap;
+          toast('LAP ' + race.lap + '  ' + fmt(race.lastLap) + '  BEST!', '#7dff8a');
+        } else {
+          toast('LAP ' + race.lap + '  ' + fmt(race.lastLap), '#6ef2c0');
+        }
+      } else {
+        toast('GO!', '#7dff8a');
+      }
+      race.started = true;
+      race.lapStart = now;
+    } else {
+      toast('GATE ' + (i + 1), '#6ef2c0');
+    }
+    race.next = (i + 1) % gates.length;
+  }
+
+  function fmt(s) {
+    if (s === null || s === undefined) return '--.--';
+    return s.toFixed(2) + 's';
+  }
+
+  function yawOf(q) {
+    _fwd.set(0, 0, -1).applyQuaternion(q);
+    return Math.atan2(-_fwd.x, -_fwd.z);
+  }
+
+  /* ---------------- camera ---------------- */
+  function updateCamera(dt) {
+    if (camMode === 'FPV') {
+      // Rigidly attached, slight uptilt — what the pilot actually sees.
+      var off = new THREE.Vector3(0, 0.075, -0.28).applyQuaternion(st.quat);
+      camera.position.copy(st.pos).add(off);
+      camera.quaternion.copy(st.quat);
+      camera.rotateX(camTilt);
+    } else {
+      // Chase cam: fixed behind/above the airframe, yaw-following, smoothed.
+      var back = new THREE.Vector3(0, 0.55, 2.4).applyQuaternion(
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yawOf(st.quat), 0))
+      );
+      var want = st.pos.clone().add(back);
+      if (want.y < 0.5) want.y = 0.5;
+      if (!chaseInit) { chasePos.copy(want); chaseInit = true; }
+      chasePos.lerp(want, 1 - Math.exp(-dt / 0.09));
+      camera.position.copy(chasePos);
+      var look = st.pos.clone().addScaledVector(st.vel, 0.07);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(look);
+    }
+    sky.position.copy(camera.position);
+  }
+
+  /* ---------------- HUD drawing ---------------- */
+  function drawHud() {
+    var w = window.innerWidth, h = window.innerHeight;
+    hx.clearRect(0, 0, w, h);
+
+    _fwd.set(0, 0, -1).applyQuaternion(st.quat);
+    _up.set(0, 1, 0).applyQuaternion(st.quat);
+    _right.set(1, 0, 0).applyQuaternion(st.quat);
+
+    var pitch = Math.asin(clamp(_fwd.y, -1, 1));
+    var roll = Math.atan2(-_right.y, _up.y);
+    var inverted = _up.y < 0;
+
+    // Horizon shifts with camera uptilt in FPV, matching the rendered view.
+    var shownPitch = pitch + (camMode === 'FPV' ? camTilt : 0);
+    var vfov = camera.fov * Math.PI / 180;
+    var ppr = h / vfov;
+
+    var col = 'rgba(110,242,192,0.92)';
+    var cx = w / 2, cy = h / 2;
+
+    // In FPV the ladder is a full-screen overlay locked to the camera. In chase
+    // the camera is level, so the same overlay would fight the rendered horizon —
+    // draw a bezelled attitude instrument instead.
+    var fpv = camMode === 'FPV';
+    var inst = fpv
+      ? { cx: cx, cy: cy, ppr: ppr, half: Math.min(w, h) * 0.42, arcR: Math.min(w, h) * 0.30, clip: 0 }
+      : (function () {
+          var r = Math.min(96, Math.min(w, h) * 0.17);
+          return { cx: cx, cy: h - r - 62, ppr: r / (50 * Math.PI / 180), half: r * 0.92, arcR: r, clip: r };
+        })();
+
+    hx.save();
+    if (inst.clip) {
+      hx.beginPath();
+      hx.arc(inst.cx, inst.cy, inst.clip, 0, Math.PI * 2);
+      hx.fillStyle = 'rgba(6,14,18,0.45)';
+      hx.fill();
+      hx.clip();
+    }
+    hx.translate(inst.cx, inst.cy);
+    hx.rotate(-roll);
+    hx.translate(0, shownPitch * inst.ppr);
+    hx.lineWidth = 2;
+    hx.strokeStyle = inverted ? 'rgba(255,120,120,0.92)' : col;
+    hx.fillStyle = hx.strokeStyle;
+    hx.font = '11px ui-monospace, monospace';
+    hx.textBaseline = 'middle';
+
+    // Horizon bar with a centre gap.
+    var half = inst.half;
+    hx.beginPath();
+    hx.moveTo(-half, 0); hx.lineTo(-half * 0.22, 0);
+    hx.moveTo(half * 0.22, 0); hx.lineTo(half, 0);
+    hx.stroke();
+
+    // Pitch ladder every 10 degrees.
+    hx.lineWidth = 1.5;
+    for (var deg = -60; deg <= 60; deg += 10) {
+      if (deg === 0) continue;
+      var y = -deg * Math.PI / 180 * inst.ppr;
+      if (Math.abs(y) > (inst.clip || h * 0.75)) continue;
+      var lw = deg % 30 === 0 ? half * 0.30 : half * 0.18;
+      hx.globalAlpha = 0.75;
+      if (deg < 0) hx.setLineDash([7, 6]);
+      hx.beginPath();
+      hx.moveTo(-lw, y); hx.lineTo(-lw * 0.35, y);
+      hx.moveTo(lw * 0.35, y); hx.lineTo(lw, y);
+      hx.stroke();
+      hx.setLineDash([]);
+      if (fpv) {
+        hx.textAlign = 'right';
+        hx.fillText(String(deg), -lw - 6, y);
+        hx.textAlign = 'left';
+        hx.fillText(String(deg), lw + 6, y);
+      }
+      hx.globalAlpha = 1;
+    }
+    hx.restore();
+
+    if (inst.clip) {
+      hx.strokeStyle = 'rgba(110,242,192,0.5)';
+      hx.lineWidth = 1;
+      hx.beginPath();
+      hx.arc(inst.cx, inst.cy, inst.clip, 0, Math.PI * 2);
+      hx.stroke();
+    }
+
+    // Fixed aircraft symbol at the instrument centre.
+    hx.strokeStyle = 'rgba(255,255,255,0.9)';
+    hx.lineWidth = 2;
+    hx.beginPath();
+    hx.moveTo(inst.cx - 22, inst.cy); hx.lineTo(inst.cx - 8, inst.cy);
+    hx.moveTo(inst.cx + 8, inst.cy); hx.lineTo(inst.cx + 22, inst.cy);
+    hx.moveTo(inst.cx, inst.cy - 5); hx.lineTo(inst.cx, inst.cy + 5);
+    hx.stroke();
+
+    // Roll arc + pointer.
+    hx.strokeStyle = col;
+    hx.lineWidth = 1.5;
+    var arcR = inst.arcR;
+    hx.beginPath();
+    hx.arc(inst.cx, inst.cy, arcR, -Math.PI * 0.72, -Math.PI * 0.28);
+    hx.stroke();
+    [-60, -30, 0, 30, 60].forEach(function (d) {
+      var a = -Math.PI / 2 + d * Math.PI / 180;
+      var len = d === 0 ? 10 : 6;
+      hx.beginPath();
+      hx.moveTo(inst.cx + Math.cos(a) * arcR, inst.cy + Math.sin(a) * arcR);
+      hx.lineTo(inst.cx + Math.cos(a) * (arcR + len), inst.cy + Math.sin(a) * (arcR + len));
+      hx.stroke();
+    });
+    var ra = -Math.PI / 2 + roll;
+    hx.fillStyle = inverted ? '#ff7878' : col;
+    hx.beginPath();
+    hx.moveTo(inst.cx + Math.cos(ra) * (arcR - 3), inst.cy + Math.sin(ra) * (arcR - 3));
+    hx.lineTo(inst.cx + Math.cos(ra - 0.035) * (arcR - 13), inst.cy + Math.sin(ra - 0.035) * (arcR - 13));
+    hx.lineTo(inst.cx + Math.cos(ra + 0.035) * (arcR - 13), inst.cy + Math.sin(ra + 0.035) * (arcR - 13));
+    hx.closePath();
+    hx.fill();
+
+    // Throttle bar (left edge).
+    var bx = 26, by = h / 2 - 90, bh = 180, bw = 12;
+    hx.strokeStyle = 'rgba(110,242,192,0.5)';
+    hx.lineWidth = 1;
+    hx.strokeRect(bx, by, bw, bh);
+    var thr = Input.ctl.throttle;
+    hx.fillStyle = st.armed ? 'rgba(110,242,192,0.85)' : 'rgba(110,242,192,0.35)';
+    hx.fillRect(bx + 1, by + bh - bh * thr + 1, bw - 2, bh * thr - 2);
+    // Actual spooled motor output as a tick.
+    hx.strokeStyle = '#ffc042';
+    hx.beginPath();
+    hx.moveTo(bx - 4, by + bh - bh * st.motor);
+    hx.lineTo(bx + bw + 4, by + bh - bh * st.motor);
+    hx.stroke();
+    hx.fillStyle = 'rgba(110,242,192,0.92)';
+    hx.font = '11px ui-monospace, monospace';
+    hx.textAlign = 'center';
+    hx.fillText('THR', bx + bw / 2, by - 10);
+    hx.fillText(Math.round(thr * 100) + '%', bx + bw / 2, by + bh + 16);
+
+    // Altitude + speed tape labels (right edge).
+    hx.textAlign = 'right';
+    hx.fillText('ALT ' + st.pos.y.toFixed(1) + 'm', w - 26, h / 2 - 8);
+    hx.fillText('SPD ' + st.vel.length().toFixed(1) + 'm/s', w - 26, h / 2 + 10);
+
+    // Next-gate director: distance + off-screen arrow.
+    var g = gates[race.next];
+    var toGate = g.centre.clone().sub(st.pos);
+    var dist = toGate.length();
+    var proj = g.centre.clone().project(camera);
+    var onScreen = proj.z < 1 && Math.abs(proj.x) < 1 && Math.abs(proj.y) < 1;
+    var gx = cx + proj.x * w / 2, gy = cy - proj.y * h / 2;
+
+    hx.strokeStyle = '#ffc042';
+    hx.fillStyle = '#ffc042';
+    hx.lineWidth = 2;
+    if (onScreen) {
+      var rr = clamp(600 / Math.max(dist, 1), 14, 90);
+      hx.globalAlpha = 0.9;
+      hx.beginPath();
+      hx.arc(gx, gy, rr, 0, Math.PI * 2);
+      hx.setLineDash([6, 8]);
+      hx.stroke();
+      hx.setLineDash([]);
+      hx.globalAlpha = 1;
+      hx.textAlign = 'center';
+      hx.fillText(Math.round(dist) + 'm', gx, gy + rr + 14);
+    } else {
+      var ang = Math.atan2(gy - cy, gx - cx);
+      if (proj.z > 1) ang += Math.PI;
+      var dirR = Math.min(w, h) * 0.30;
+      var ax2 = cx + Math.cos(ang) * dirR * 0.78;
+      var ay2 = cy + Math.sin(ang) * dirR * 0.78;
+      hx.save();
+      hx.translate(ax2, ay2);
+      hx.rotate(ang);
+      hx.beginPath();
+      hx.moveTo(14, 0); hx.lineTo(-8, -8); hx.lineTo(-8, 8);
+      hx.closePath();
+      hx.fill();
+      hx.restore();
+      hx.textAlign = 'center';
+      hx.fillText(Math.round(dist) + 'm', ax2, ay2 + 24);
+    }
+
+    // Big warning band when disarmed.
+    if (!st.armed) {
+      hx.textAlign = 'center';
+      hx.fillStyle = 'rgba(255,91,91,0.9)';
+      hx.font = 'bold 14px ui-monospace, monospace';
+      hx.fillText('DISARMED — PRESS ' + (Input.active === 'gamepad' ? '✕ / A' : 'SPACE') + ' TO ARM', cx, h - 34);
+    }
+  }
+
+  /* ---------------- main loop ---------------- */
+  var last = performance.now();
+  var lastArmed = st.armed;
+  var accumulator = 0;
+  var FIXED = 1 / 240;   // fixed physics step keeps the feel frame-rate independent
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    var dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+
+    Input.update(dt);
+
+    // One-shot gamepad button edges.
+    if (Input.edges.arm) toggleArm();
+    if (Input.edges.reset) resetDrone(false);
+    if (Input.edges.camera) toggleCamera();
+    if (Input.edges.restart) restartRace();
+
+    accumulator += dt;
+    var steps = 0;
+    while (accumulator >= FIXED && steps < 64) {
+      stepPhysics(FIXED);
+      accumulator -= FIXED;
+      steps++;
+    }
+    if (steps === 64) accumulator = 0;
+
+    drone.position.copy(st.pos);
+    drone.quaternion.copy(st.quat);
+
+    var spin = (0.6 + st.motor * 5.5) * (st.armed ? 1 : 0);
+    props.forEach(function (p) { p.mesh.rotation.y += p.dir * spin * dt * 60; });
+
+    gates.forEach(function (g, i) {
+      g.glow.material.color.setHex(i === race.next ? 0xffc042 : 0x39506e);
+    });
+
+    if (st.armed !== lastArmed) { lastArmed = st.armed; updateStatusChrome(); }
+
+    updateCamera(dt);
+    renderer.render(scene, camera);
+    drawHud();
+
+    // Text panels
+    ui.thr.textContent = Math.round(Input.ctl.throttle * 100) + '%';
+    ui.spd.textContent = st.vel.length().toFixed(1) + ' m/s';
+    ui.alt.textContent = st.pos.y.toFixed(1) + ' m';
+    ui.cam.textContent = camMode;
+    ui.gateinfo.textContent = (race.next + 1) + ' / ' + gates.length;
+    ui.laptime.textContent = race.lapStart !== null && race.started
+      ? fmt((performance.now() - race.lapStart) / 1000)
+      : fmt(race.lastLap);
+    ui.besttime.textContent = fmt(race.best);
+
+    // Keep the pad label fresh if a controller appears without an event
+    // (Chrome only fires gamepadconnected after the first button press).
+    if (Input.padIndex !== null && Input.active === 'keyboard' &&
+        ui.padname.textContent.indexOf('No gamepad') === 0) inputChanged();
+  }
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>

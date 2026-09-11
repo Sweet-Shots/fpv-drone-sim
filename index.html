@@ -486,52 +486,176 @@
 })();
 
 /* ================================================================== *
- * TUNING
+ * FLIGHT MODEL — a real 5" freestyle quad in Betaflight acro mode
+ *
+ * Reference airframe every number below describes:
+ *   220 mm wheelbase X frame, 2207/2450KV motors, 5x4.3x3 tri-blade
+ *   props, 4S 1300 mAh Li-Po, ~650 g all-up weight. These are physical
+ *   quantities with units, not feel knobs — if one of them is wrong it
+ *   is wrong about a real quadcopter and can be argued about as such.
  * ================================================================== */
+var QUAD = {
+  massKg: 0.650,              // kg      all-up weight with pack, no action cam
+  gravity: 9.81,              // m/s^2
+
+  /* --- propulsion -------------------------------------------------- */
+  thrustPerMotorN: 10.30,     // N       static thrust per motor at 100% and 16.8 V
+                              //         = 1050 gf.  4 x 1050 gf / 650 g = 6.46:1 bench
+  thrustRefV: 16.8,           // V       pack voltage the figure above is quoted at
+  thrustExp: 1.5,             // -       T ~ cmd^1.5.  Loaded RPM ~ cmd^0.75 and
+                              //         T ~ RPM^2, which is the usual fit to a
+                              //         motor test-stand thrust-vs-throttle table.
+  motorIdle: 0.055,           // -       Betaflight motor_idle 5.5%: armed props
+                              //         never stop, and the stick maps onto [idle,1]
+  spoolUpTau: 0.022,          // s       rotor RPM step response, rising (DShot600)
+  spoolDownTau: 0.030,        // s       falling — only prop drag decelerates it
+  armM: 0.0778,               // m       motor offset from CG on body X and Z
+                              //         (220 mm motor-to-motor diagonal / 2 / sqrt2)
+  propTorqueArm: 0.0100,      // m       prop drag torque per newton of thrust,
+                              //         = (Cq/Ct)*D for a 5" tri-blade. This is the
+                              //         ONLY source of yaw torque, hence weak yaw.
+  propRadiusM: 0.0635,        // m       5" prop
+  pitchSpeedMax: 45.0,        // m/s     geometric pitch speed at 100% throttle:
+                              //         4.3 in of pitch at ~25 000 rpm. Thrust falls
+                              //         to zero as axial inflow approaches this.
+  inducedVelHover: 7.2,       // m/s     momentum-theory induced velocity per rotor
+                              //         at hover: sqrt(T / (2 rho A)). Sets where
+                              //         vortex-ring state / propwash lives.
+
+  /* --- inertia, kg m^2 (about the CG, body axes) -------------------- */
+  Iroll: 0.0032,              // about body Z
+  Ipitch: 0.0040,             // about body X — stack and pack are longer fore/aft
+  Iyaw: 0.0062,               // about body Y
+
+  /* --- aerodynamics ------------------------------------------------- */
+  rho: 1.225,                 // kg/m^3  ISA sea-level air density
+  cdaLateral: 0.012,          // m^2     Cd*A side-on   (body X)
+  cdaAxial:  0.055,           // m^2     Cd*A belly-on  (body Y) — four spinning prop
+                              //         discs plus the plate; this is the big one,
+                              //         and it is why a flat fall is slow and a
+                              //         nose-down dive is not.
+  cdaLong:   0.014,           // m^2     Cd*A nose-on   (body Z) — frame edge, cam, arms
+  rotDampBody: 0.00150,       // N m per rad/s   airframe + windmilling props
+  rotDampProp: 0.00600,       // N m per rad/s   extra at 100% motor. Derived, not
+                              //         guessed: rolling at w moves each disc
+                              //         vertically at w*arm, which changes its
+                              //         inflow and so its thrust by -T/Vpitch per
+                              //         m/s. Summed over four motors that is
+                              //         4*(T/Vpitch)*arm^2 = 5.5e-3 N m per rad/s.
+  propwashTorque: 0.035       // N m     peak oscillating disturbance in full VRS
+};
+
+/* Flight-controller constants. The rate loop below is a P+D controller on
+ * gyro rate error whose output is a Betaflight motor mix — not a lag toward
+ * the commanded rate — so authority is whatever the four motors can actually
+ * produce at the current throttle. Gains are stated as the closed-loop
+ * response they buy, because that is the auditable quantity: a well-tuned
+ * 5" quad reaches a commanded roll rate in roughly 50 ms, pitch a little
+ * slower, yaw two to three times slower again. */
+var FC = {
+  tau: { roll: 0.022, pitch: 0.026, yaw: 0.045 },  // s   closed-loop rate time constants
+  dTime: 0.015,               // s   D/P ratio expressed as a time
+  iTime: 0.60,                // s   I/P ratio expressed as a time
+  iLimit: 0.12,               // -   I-term clamp, fraction of motor range
+  pidSumLimit: 0.50,          // -   Betaflight pidsum_limit     500/1000
+  pidSumLimitYaw: 0.40,       // -   Betaflight pidsum_limit_yaw 400/1000
+  gainThrottleRef: 0.30,      // -   motor command the gains are tuned at (hover)
+  airmodeShiftThrottle: 0.50, // -   above this stick Betaflight shifts throttle to
+                              //     fit the mix even with AIR MODE switched off
+  minCheck: 0.05,             // -   Betaflight min_check (1050 of 1000-2000 us):
+                              //     below this the stick counts as "down"
+  gyroLimit: 2000 * Math.PI / 180  // rad/s  the gyro's full scale. Spin faster
+                              //     than this and the FC is flying on a clipped
+                              //     reading — ICM/MPU parts default to +-2000 dps.
+};
+
 var CFG = {
   deadzone: 0.09,
-  idleAngDamp: 1.6,
-  maxThrust: 26.0,
   gravity: 9.81,
-  dragLinear: 0.16,
-  dragQuad: 0.0125,
-  thrustSpool: 0.06,
   throttleRampUp: 1.15,
   throttleRampDown: 1.35,
-  groundY: 0.13,
-  crashSpeed: 9.0,
-  bounce: 0.22,
-  friction: 0.72,
+  groundY: 0.13,              // m     body centre height sitting on its feet
+  crashSpeed: 8.0,            // m/s   impact that ends the flight. A 5" quad into a
+                              //       hard object at 8 m/s breaks a prop or an arm.
+  bounce: 0.22,               // -     coefficient of restitution, carbon/plastic
+  frictionMu: 0.65,           // -     Coulomb friction, skids/feet on grass or concrete
   camTilt: 22 * Math.PI / 180,
   fpvFov: 100,
   chaseFov: 74,
   losFov: 42,
-  // 4S pack: 16.8V charged, 14.0V is "land now", sag is proportional to draw.
-  battery: { cells: 4, full: 4.2, empty: 3.5, capacity: 190, sag: 0.85 }
+  /* 4S 1300 mAh Li-Po. Full 4.20 V/cell, 3.30 V/cell under load is "land now".
+   * Draw is modelled electrically and the pack's internal resistance sags it,
+   * which costs RPM and therefore thrust — a fresh pack really does punch out
+   * harder than a half-used one. */
+  battery: {
+    cells: 4,
+    full: 4.20,               // V/cell  resting, fully charged
+    empty: 3.40,              // V/cell  resting, empty
+    capacity: 1300,           // mAh
+    rPack: 0.016,             // ohm     whole-pack internal resistance + wiring
+    maxAmps: 105,             // A       draw at 100% on all four motors
+    idleAmps: 0.9,            // A       FC, VTX, RX, motors at idle
+    currentExp: 1.8           // -       I ~ cmd^1.8 (fits published motor tables)
+  }
 };
 
-/* Rate profiles. Real acro quads do run 600-900 deg/s — that is not a bug,
- * it is what freestyle rates feel like. Nobody learns on them, though. */
+/* Rate profiles, expressed in real Betaflight "Betaflight rates" terms —
+ * RC Rate, Super Rate and RC Expo per axis — and run through the firmware's
+ * own formula in bfRate(). Switchable rate profiles are a genuine feature of
+ * every real quad, so all three stay. Peak rates: 260/420/700 deg/s in roll. */
 var RATE_PROFILES = [
   { id: 'cruise', name: 'Cruise', code: 'R1',
-    rate: { pitch: 240, roll: 260, yaw: 170 },
-    expo: { pitch: 0.30, roll: 0.30, yaw: 0.25 },
-    tau:  { pitch: 0.075, roll: 0.070, yaw: 0.100 },
+    rc:   { pitch: 0.80, roll: 0.80, yaw: 0.80 },
+    sup:  { pitch: 0.333, roll: 0.385, yaw: 0.059 },
+    expo: { pitch: 0.10, roll: 0.10, yaw: 0.05 },
     smooth: 0.11,
     desc: 'Gentle. Rates a trainer quad would ship with.' },
   { id: 'sport', name: 'Sport', code: 'R2',
-    rate: { pitch: 380, roll: 420, yaw: 240 },
-    expo: { pitch: 0.42, roll: 0.42, yaw: 0.35 },
-    tau:  { pitch: 0.055, roll: 0.050, yaw: 0.085 },
+    rc:   { pitch: 1.00, roll: 1.00, yaw: 1.00 },
+    sup:  { pitch: 0.474, roll: 0.524, yaw: 0.167 },
+    expo: { pitch: 0.18, roll: 0.18, yaw: 0.12 },
     smooth: 0.075,
     desc: 'Quick but recoverable. Start here.' },
   { id: 'acro', name: 'Acro', code: 'R3',
-    rate: { pitch: 620, roll: 700, yaw: 380 },
-    expo: { pitch: 0.50, roll: 0.50, yaw: 0.40 },
-    tau:  { pitch: 0.045, roll: 0.040, yaw: 0.075 },
+    rc:   { pitch: 1.15, roll: 1.20, yaw: 1.10 },
+    sup:  { pitch: 0.629, roll: 0.657, yaw: 0.421 },
+    expo: { pitch: 0.25, roll: 0.25, yaw: 0.15 },
     smooth: 0.055,
     desc: 'Real freestyle rates. Two rolls a second. Unforgiving.' }
 ];
+
+/* Betaflight applyBetaflightRates(), fc/rc.c — expo blend first, then
+ * RC Rate, then the Super Rate expansion at the stick ends. Returns deg/s. */
+function bfRate(x, rcRate, superRate, expo) {
+  if (x > 1) x = 1; else if (x < -1) x = -1;
+  var a = x < 0 ? -x : x;
+  if (expo) x = x * (a * a * a) * expo + x * (1 - expo);
+  var r = 200 * rcRate * x;
+  if (superRate) {
+    var f = 1 - a * superRate;
+    r *= 1 / (f < 0.01 ? 0.01 : f > 1 ? 1 : f);
+  }
+  return r;
+}
+
+/* The three idle-authority settings, worst to best, in the order the menu
+ * cycles them. See Input.idleMode for what each one is. */
+var IDLE_MODES = ['motorstop', 'idle', 'airmode'];
+var IDLE_MODE_NAMES = { motorstop: 'Motor stop', idle: 'Idle floor', airmode: 'Air mode' };
+function idleModeName() { return IDLE_MODE_NAMES[Input.idleMode]; }
+function cycleIdleMode() {
+  var i = IDLE_MODES.indexOf(Input.idleMode);
+  Input.idleMode = IDLE_MODES[(i + 1) % IDLE_MODES.length];
+  Store.data.idleMode = Input.idleMode;
+  Store.save();
+}
+
+/* Peak rate per axis, for the menus. */
+RATE_PROFILES.forEach(function (p) {
+  p.rate = { pitch: Math.round(bfRate(1, p.rc.pitch, p.sup.pitch, p.expo.pitch)),
+             roll:  Math.round(bfRate(1, p.rc.roll,  p.sup.roll,  p.expo.roll)),
+             yaw:   Math.round(bfRate(1, p.rc.yaw,   p.sup.yaw,   p.expo.yaw)) };
+});
 
 var MAPS = [
   { id: 'field', name: 'Sunset Field', code: 'M1', light: 'day',
@@ -550,7 +674,7 @@ var SCENARIOS = [
   { id: 'rush', name: 'Gate Rush', code: 'S3', camera: 'fpv', seconds: 45, bonus: 4,
     desc: 'Forty-five seconds. Every gate you take adds four more.' },
   { id: 'recover', name: 'Recovery Drill', code: 'S4', camera: 'fpv',
-    desc: 'Dropped inverted and tumbling. Stop the spin, get upright, hold it — before the ground arrives.' },
+    desc: 'Dropped inverted, tumbling and already sinking. Read the attitude, roll upright, then power out — before the ground arrives.' },
   { id: 'los', name: 'Line of Sight', code: 'S5', camera: 'los',
     desc: 'The camera stays on the ground where you are standing. Fly the course by eye, like a real field.' }
 ];
@@ -560,7 +684,7 @@ var SCENARIOS = [
  * ================================================================== */
 var Store = {
   key: 'acrofpv.v2',
-  data: { rates: 'sport', map: 'field', scenario: 'race', arms: true, volume: 0.7, sound: true, records: {} },
+  data: { rates: 'sport', idleMode: 'airmode', map: 'field', scenario: 'race', arms: true, volume: 0.7, sound: true, records: {} },
   load: function () {
     try {
       var raw = localStorage.getItem(this.key);
@@ -749,6 +873,27 @@ var Input = {
   ctl: { throttle: 0, yaw: 0, pitch: 0, roll: 0 },
   throttleMode: 'absolute',
   profile: RATE_PROFILES[1],
+  /* What the flight controller can do at the bottom of the throttle. These
+   * are three real, mutually exclusive Betaflight configurations, and the
+   * difference between them is enormous — it is the single biggest thing
+   * separating how a 2015 racing quad flies from how a 2024 freestyle one
+   * does. Measured decay of a 195 deg/s tumble at zero throttle, sticks
+   * centred, in this model:
+   *   motorstop  never stops  (nothing is turning, so there is no torque)
+   *   idle       ~0.3 s       (only the upward half of each correction lives)
+   *   airmode    ~0.15 s      (full authority, and it climbs while it does it)
+   *
+   * 'motorstop' is FEATURE_MOTOR_STOP: below min_check the motors are
+   *   commanded to a dead stop. Chop the throttle and you are a brick.
+   * 'idle'      is the plain firmware default: motors hold motor_idle, and
+   *   below half throttle the mixer may not shift the set to fit the mix, so
+   *   the low side of every correction sits on the idle floor.
+   * 'airmode'   is FEATURE_AIRMODE, what virtually every real freestyle pilot
+   *   flies: the mixer shifts throttle so the mix always fits, giving full
+   *   authority at zero throttle at the price of the quad shoving itself
+   *   upward whenever you ask for a big correction down low. AIR MODE and
+   *   MOTOR_STOP are mutually exclusive in the firmware, as they are here. */
+  idleMode: 'airmode',
   edges: {},
   nav: {},
   _prevButtons: [],
@@ -849,11 +994,12 @@ var Input = {
 
     if (pad) {
       if (this.padName !== pad.id) this.padName = pad.id;
-      var p = this.profile;
-      var lx = curve(dz(pad.axes[0] || 0), p.expo.yaw);
+      // Raw stick, deadzone only. Expo and rates are the flight controller's
+      // job and are applied there (bfRate), exactly as on a real radio+FC.
+      var lx = dz(pad.axes[0] || 0);
       var ly = dz(pad.axes[1] || 0);
-      var rx = curve(dz(pad.axes[2] || 0), p.expo.roll);
-      var ry = curve(dz(pad.axes[3] || 0), p.expo.pitch);
+      var rx = dz(pad.axes[2] || 0);
+      var ry = dz(pad.axes[3] || 0);
       padActive = Math.abs(lx) > 0.02 || Math.abs(ly) > 0.02 || Math.abs(rx) > 0.02 || Math.abs(ry) > 0.02;
 
       for (var b = 0; b < pad.buttons.length; b++) {
@@ -965,7 +1111,6 @@ function dz(v) {
   if (Math.abs(v) < d) return 0;
   return (v - Math.sign(v) * d) / (1 - d);
 }
-function curve(x, expo) { return (1 - expo) * x + expo * x * x * x; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 function approach(cur, target, dt, tau) { return cur + (target - cur) * (1 - Math.exp(-dt / tau)); }
 function fmtTime(s) {
@@ -1282,7 +1427,9 @@ function start() {
 
   function buildField() {
     var spec = { gates: [], pylons: [], spawn: { x: 0, y: CFG.groundY, z: 8, yaw: 0 },
-      pilot: new THREE.Vector3(0, 1.65, 15), wind: { x: 1.5, z: 0.7, gust: 1.1 },
+      // Wind is a VELOCITY field in m/s now, felt through drag like real air.
+      // 3.9 m/s mean (~8 kt) with gusts to about 6.5 — an ordinary flyable day.
+      pilot: new THREE.Vector3(0, 1.65, 15), wind: { x: 3.5, z: 1.6, gust: 2.4 },
       fog: 0xc3b696, fogNear: 90, fogFar: 620, ceiling: 0 };
 
     setSky(0x2f6ea8, 0xbcd0d6, 0xe8bd84, new THREE.Vector3(-0.55, 0.16, -0.8), 0xffcf8f, 1.0);
@@ -1329,7 +1476,8 @@ function start() {
 
   function buildNight() {
     var spec = { gates: [], pylons: [], spawn: { x: 0, y: CFG.groundY, z: 10, yaw: 0 },
-      pilot: new THREE.Vector3(0, 1.65, 17), wind: { x: 0.5, z: 0.3, gust: 0.45 },
+      // Still night air: 1.4 m/s (~3 kt) with the odd light gust.
+      pilot: new THREE.Vector3(0, 1.65, 17), wind: { x: 1.2, z: 0.7, gust: 0.9 },
       fog: 0x05070d, fogNear: 30, fogFar: 260, ceiling: 0, night: true };
 
     setSky(0x05070f, 0x0a1020, 0x0d1219, new THREE.Vector3(0.5, 0.4, 0.7), 0x9fb6d8, 0.15);
@@ -1601,7 +1749,9 @@ function start() {
   var st = {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(),
     quat: new THREE.Quaternion(), omega: new THREE.Vector3(),
-    armed: false, motor: 0, mah: 0, volts: CFG.battery.full * CFG.battery.cells,
+    armed: false, motor: 0, motors: [0, 0, 0, 0],
+    mah: 0, amps: 0, volts: CFG.battery.full * CFG.battery.cells,
+    thrustN: 0, airspeed: 0, propwash: 0,
     crashes: 0, flightTime: 0, alive: true
   };
 
@@ -1613,43 +1763,265 @@ function start() {
     return Math.atan2(-_fwd.x, -_fwd.z);
   }
 
+  function zeroMotors() {
+    st.motor = 0;
+    st.motors[0] = st.motors[1] = st.motors[2] = st.motors[3] = 0;
+    iTerm.set(0, 0, 0);
+    prevOmega.set(0, 0, 0);
+  }
+
   function placeAtSpawn() {
     var s = mapSpec.spawn;
     st.pos.set(s.x, s.y, s.z);
     st.vel.set(0, 0, 0);
     st.omega.set(0, 0, 0);
     st.quat.setFromEuler(new THREE.Euler(0, s.yaw, 0));
-    st.motor = 0;
+    zeroMotors();
     st.alive = true;
     chaseInit = false;
   }
 
   function resetBattery() {
     st.mah = 0;
+    st.amps = 0;
     st.volts = CFG.battery.full * CFG.battery.cells;
   }
 
-  /* ================= PHYSICS ================= */
-  var windPhase = 0;
+  /* ================================================================== *
+   * PHYSICS
+   *
+   * The chain is the real one: sticks -> Betaflight rates -> a P+D rate
+   * loop -> a motor mix -> four motor RPMs with their own spool lag ->
+   * four thrusts and four prop drag torques -> rigid-body dynamics with
+   * anisotropic aerodynamic drag. Nothing short-circuits it, so control
+   * authority is always whatever the motors can actually produce.
+   * ================================================================== */
+  var windPhase = 0, pwPhase = 0;
+  var DEG = Math.PI / 180;
+
+  /* Motor geometry. Body axes are Three.js': +X right, +Y up, +Z aft.
+   * Betaflight QUAD X numbering, 1 = rear right. Diagonal pairs share a
+   * rotation direction, so yawDir is equal within a diagonal — that is
+   * what makes a diagonal pair produce pure yaw and no roll or pitch.
+   *   torque about X (pitch, nose up +) = -z * T
+   *   torque about Z (roll,  left  +) = +x * T
+   *   torque about Y (yaw,   left  +) = yawDir * T * propTorqueArm      */
+  var MOTORS = [
+    { x:  QUAD.armM, z:  QUAD.armM, yawDir: -1 },   // 1 rear right
+    { x:  QUAD.armM, z: -QUAD.armM, yawDir:  1 },   // 2 front right
+    { x: -QUAD.armM, z:  QUAD.armM, yawDir:  1 },   // 3 rear left
+    { x: -QUAD.armM, z: -QUAD.armM, yawDir: -1 }    // 4 front left
+  ];
+  MOTORS.forEach(function (m) {
+    m.mixRoll = m.x / QUAD.armM;        // +1 right, -1 left
+    m.mixPitch = -m.z / QUAD.armM;      // +1 front, -1 rear
+    m.mixYaw = m.yawDir;
+  });
+
+  /* Rate-loop gains. Betaflight's P/I/D are fixed numbers, so the authority
+   * they buy rises and falls with throttle exactly as the mixer's available
+   * differential thrust does. We pick kP to give FC.tau at the throttle a
+   * pilot actually tunes at (hover), and let everything else follow.
+   *   dTau/dMix = 4 * arm * (dT/dcmd)   for a two-up two-down mix            */
+  var _dTdm = QUAD.thrustPerMotorN * QUAD.thrustExp *
+              Math.pow(FC.gainThrottleRef, QUAD.thrustExp - 1);   // N per unit of mix
+  var KP = {
+    roll:  QUAD.Iroll  / (FC.tau.roll  * 4 * QUAD.armM * _dTdm),
+    pitch: QUAD.Ipitch / (FC.tau.pitch * 4 * QUAD.armM * _dTdm),
+    yaw:   QUAD.Iyaw   / (FC.tau.yaw   * 4 * QUAD.propTorqueArm * _dTdm)
+  };
+
+  var iTerm = new THREE.Vector3();       // x pitch, y yaw, z roll — motor-range units
+  var prevOmega = new THREE.Vector3();
+  var _wind = new THREE.Vector3(), _airW = new THREE.Vector3(), _airB = new THREE.Vector3();
+  var _conj = new THREE.Quaternion(), _drag = new THREE.Vector3();
+  var _mix = [0, 0, 0, 0];
+
+  /* Ground effect: the classic image-rotor result T/Tinf = 1/(1-(R/4z)^2),
+   * with z the height of the prop discs above the ground. For a 5" prop
+   * sitting 13 cm up this is under 2%, and it is gone by half a metre —
+   * which is exactly how little ground effect a real 5" quad has. It is
+   * here for completeness, not because it changes how the thing flies. */
+  function groundEffect(agl) {
+    var z = agl > QUAD.propRadiusM * 0.5 ? agl : QUAD.propRadiusM * 0.5;
+    var k = QUAD.propRadiusM / (4 * z);
+    return clamp(1 / (1 - k * k), 1, 1.12);
+  }
 
   function stepPhysics(dt) {
-    var c = Input.ctl, p = Input.profile;
+    var c = Input.ctl, p = Input.profile, i, m;
 
-    var tp = c.pitch * p.rate.pitch * Math.PI / 180;
-    var ty = -c.yaw * p.rate.yaw * Math.PI / 180;
-    var tr = -c.roll * p.rate.roll * Math.PI / 180;
+    /* ---- 1. sticks -> commanded body rates, Betaflight's own formula ---- */
+    var tp =  bfRate(c.pitch, p.rc.pitch, p.sup.pitch, p.expo.pitch) * DEG;
+    var ty = -bfRate(c.yaw,   p.rc.yaw,   p.sup.yaw,   p.expo.yaw)   * DEG;
+    var tr = -bfRate(c.roll,  p.rc.roll,  p.sup.roll,  p.expo.roll)  * DEG;
 
-    if (st.armed) {
-      // Torque comes from differential thrust, so authority follows the
-      // motors. Near zero throttle you have almost none — which is why a
-      // tumbling quad needs throttle before it can be caught.
-      var auth = 0.06 + 0.94 * Math.pow(st.motor, 0.35);
-      st.omega.x += (tp - st.omega.x) * (1 - Math.exp(-dt * auth / p.tau.pitch));
-      st.omega.y += (ty - st.omega.y) * (1 - Math.exp(-dt * auth / p.tau.yaw));
-      st.omega.z += (tr - st.omega.z) * (1 - Math.exp(-dt * auth / p.tau.roll));
-    } else {
-      st.omega.multiplyScalar(Math.exp(-CFG.idleAngDamp * dt));
+    /* ---- 2. air data. Everything aerodynamic uses AIRspeed, not ground
+     *         speed, so wind is felt as a force through drag rather than
+     *         bolted on as an acceleration. ---------------------------- */
+    var w = mapSpec.wind;
+    _wind.set(0, 0, 0);
+    if (w && (w.x || w.z || w.gust)) {
+      windPhase += dt * 0.37;
+      // 1/7-power law boundary layer over open ground, 10 m reference height.
+      var shear = clamp(Math.pow(Math.max(st.pos.y, 0.3) / 10, 0.143), 0.45, 1.2);
+      var gust = 1 + Math.sin(windPhase) * 0.28 + Math.sin(windPhase * 2.3) * 0.16;
+      _wind.set(w.x * gust + Math.sin(windPhase * 1.7) * w.gust, 0,
+                w.z * gust + Math.cos(windPhase * 1.3) * w.gust).multiplyScalar(shear);
     }
+    _airW.copy(st.vel).sub(_wind);
+    st.airspeed = _airW.length();
+    _conj.copy(st.quat).conjugate();
+    _airB.copy(_airW).applyQuaternion(_conj);
+    var vAxial = _airB.y;                 // + = air entering the discs from above
+
+    /* ---- 3. rate loop: P on gyro error, D on gyro derivative, clamped I.
+     *         The output is a Betaflight pidSum per axis in motor-range
+     *         units — this is what actively BRAKES a rotation, and it is
+     *         the same term whether you are chasing a rate or killing one. */
+    var thr = st.armed ? clamp(c.throttle, 0, 1) : 0;
+    var airmode = Input.idleMode === 'airmode';
+    // Betaflight resets the I-term at the bottom of the throttle unless air
+    // mode is on, so a wound-up I cannot slam the quad when you throttle up.
+    if (!airmode && thr < FC.minCheck) iTerm.set(0, 0, 0);
+
+    var mixR = 0, mixP = 0, mixY = 0;
+    if (st.armed) {
+      // The FC only ever sees what the gyro reports, and the gyro clips at
+      // its full scale. Past +-2000 deg/s the correction is real but blind.
+      var gP = clamp(st.omega.x, -FC.gyroLimit, FC.gyroLimit);
+      var gY = clamp(st.omega.y, -FC.gyroLimit, FC.gyroLimit);
+      var gR = clamp(st.omega.z, -FC.gyroLimit, FC.gyroLimit);
+      var eP = tp - gP, eY = ty - gY, eR = tr - gR;
+      var dP = (st.omega.x - prevOmega.x) / dt;
+      var dY = (st.omega.y - prevOmega.y) / dt;
+      var dR = (st.omega.z - prevOmega.z) / dt;
+      iTerm.x = clamp(iTerm.x + KP.pitch / FC.iTime * eP * dt, -FC.iLimit, FC.iLimit);
+      iTerm.y = clamp(iTerm.y + KP.yaw   / FC.iTime * eY * dt, -FC.iLimit, FC.iLimit);
+      iTerm.z = clamp(iTerm.z + KP.roll  / FC.iTime * eR * dt, -FC.iLimit, FC.iLimit);
+      mixP = clamp(KP.pitch * eP - KP.pitch * FC.dTime * dP + iTerm.x, -FC.pidSumLimit, FC.pidSumLimit);
+      mixY = clamp(KP.yaw   * eY - KP.yaw   * FC.dTime * dY + iTerm.y, -FC.pidSumLimitYaw, FC.pidSumLimitYaw);
+      mixR = clamp(KP.roll  * eR - KP.roll  * FC.dTime * dR + iTerm.z, -FC.pidSumLimit, FC.pidSumLimit);
+    } else {
+      iTerm.set(0, 0, 0);
+    }
+    prevOmega.copy(st.omega);
+
+    /* ---- 4. mixer, exactly as Betaflight builds it ---------------------
+     *  motor = throttle + mix, mix scaled down if its span exceeds the
+     *  motor range, then clipped to [motor_idle, 1]. AIR MODE (and, in the
+     *  firmware, any throttle above half) shifts the whole set so the mix
+     *  always fits; without it the low side sits on the idle floor, so only
+     *  the upward half of each correction survives and any correction whose
+     *  mix is smaller than the idle offset produces no differential thrust
+     *  at all. That is the real, measurable reason authority collapses at
+     *  the bottom of the stick without air mode — roughly a quarter of the
+     *  mid-throttle torque, not none of it. For none of it, see MOTOR_STOP
+     *  below, which is what the recovery drill actually depends on. */
+    var mn = 1e9, mx = -1e9;
+    for (i = 0; i < 4; i++) {
+      m = MOTORS[i];
+      _mix[i] = mixR * m.mixRoll + mixP * m.mixPitch + mixY * m.mixYaw;
+      if (_mix[i] < mn) mn = _mix[i];
+      if (_mix[i] > mx) mx = _mix[i];
+    }
+    var span = mx - mn;
+    if (span > 1) { for (i = 0; i < 4; i++) _mix[i] /= span; mn /= span; mx /= span; }
+
+    // FEATURE_MOTOR_STOP: stick below min_check and the motors are commanded
+    // to a dead stop, whatever the PID loop would like. Nothing is turning,
+    // so there is no differential thrust and no authority at all — which is
+    // why a quad set up this way tumbles out of the sky the moment you chop
+    // the throttle, and why the recovery drill is a drill.
+    var stopped = Input.idleMode === 'motorstop' && thr < FC.minCheck;
+    var base = QUAD.motorIdle + (1 - QUAD.motorIdle) * thr;
+    if (airmode || thr > FC.airmodeShiftThrottle) {
+      if (base + mn < QUAD.motorIdle) base = QUAD.motorIdle - mn;
+      if (base + mx > 1) base = 1 - mx;
+    }
+
+    /* ---- 5. rotor spool. RPM cannot step; thrust follows RPM squared. -- */
+    var mAvg = 0;
+    for (i = 0; i < 4; i++) {
+      var cmd = (st.armed && !stopped) ? clamp(base + _mix[i], QUAD.motorIdle, 1) : 0;
+      var tau = cmd > st.motors[i] ? QUAD.spoolUpTau : QUAD.spoolDownTau;
+      st.motors[i] += (cmd - st.motors[i]) * (1 - Math.exp(-dt / tau));
+      mAvg += st.motors[i];
+    }
+    mAvg *= 0.25;
+    st.motor = mAvg;
+
+    /* ---- 6. battery. Draw is electrical, the pack's internal resistance
+     *         sags it, and a sagged pack spins the motors slower, so thrust
+     *         goes as (V/Vref)^2. A fresh pack really does punch harder. -- */
+    var B = CFG.battery;
+    var amps = B.idleAmps + B.maxAmps * Math.pow(mAvg, B.currentExp);
+    st.amps = amps;
+    st.mah += amps * (1000 / 3600) * dt;
+    var soc = clamp(1 - st.mah / B.capacity, 0, 1);
+    var rest = ocvPerCell(soc) * B.cells;
+    st.volts = Math.max(B.cells * 2.8, rest - amps * B.rPack);
+    var vScale = clamp((st.volts / QUAD.thrustRefV) * (st.volts / QUAD.thrustRefV), 0.4, 1.06);
+
+    /* ---- 7. vortex ring state / propwash. Descending along your own
+     *         thrust axis at roughly 1.5x the hover induced velocity puts
+     *         the discs in their own wake: thrust drops and the FC is fed
+     *         turbulence it cannot reject. That IS propwash. ------------- */
+    var descentAx = -vAxial;
+    var vrs = 0;
+    if (mAvg > 0.06 && descentAx > 0) {
+      var z = (descentAx - 1.5 * QUAD.inducedVelHover) / 7;
+      vrs = Math.exp(-z * z) * clamp(mAvg * 2.2, 0, 1);
+    }
+    st.propwash = vrs;
+
+    /* ---- 8. thrust and torque from the four rotors --------------------- */
+    var ge = groundEffect(Math.max(st.pos.y, 0.02));
+    var tqX = 0, tqY = 0, tqZ = 0, Tsum = 0;
+    for (i = 0; i < 4; i++) {
+      var mi = st.motors[i];
+      var Ti = 0;
+      if (mi > 1e-4) {
+        Ti = QUAD.thrustPerMotorN * Math.pow(mi, QUAD.thrustExp) * vScale * ge;
+        // Axial inflow unloads the disc; thrust dies as the airspeed
+        // through it approaches the prop's geometric pitch speed. This is
+        // what actually caps top speed and climb rate on a real quad.
+        var vp = QUAD.pitchSpeedMax * Math.pow(mi, QUAD.thrustExp / 2);
+        if (vp > 1) Ti *= clamp(1 - vAxial / vp, 0, 1.15);
+        Ti *= 1 - 0.22 * vrs;
+      }
+      Tsum += Ti;
+      m = MOTORS[i];
+      tqX += -m.z * Ti;
+      tqZ += m.x * Ti;
+      tqY += m.mixYaw * Ti * QUAD.propTorqueArm;
+    }
+    st.thrustN = Tsum;
+
+    // Aerodynamic damping of body rotation: the airframe, plus a much
+    // larger term from the spinning discs (an advancing blade sees more
+    // inflow than a retreating one).
+    var dampC = QUAD.rotDampBody + QUAD.rotDampProp * mAvg;
+    tqX -= dampC * st.omega.x;
+    tqY -= dampC * 1.6 * st.omega.y;     // yaw damps hardest: biggest lever on the discs
+    tqZ -= dampC * st.omega.z;
+
+    if (vrs > 0.01) {
+      pwPhase += dt * 47;
+      var pw = vrs * QUAD.propwashTorque;
+      tqX += Math.sin(pwPhase * 1.37) * pw;
+      tqZ += Math.sin(pwPhase * 0.91 + 1.7) * pw;
+    }
+
+    /* ---- 9. rigid-body rotation, including the Euler (gyroscopic) term
+     *         that couples a simultaneous roll and pitch into yaw. ------- */
+    var wx = st.omega.x, wy = st.omega.y, wz = st.omega.z;
+    var gx = wy * (QUAD.Iroll * wz) - wz * (QUAD.Iyaw * wy);
+    var gy = wz * (QUAD.Ipitch * wx) - wx * (QUAD.Iroll * wz);
+    var gz = wx * (QUAD.Iyaw * wy) - wy * (QUAD.Ipitch * wx);
+    st.omega.x += (tqX - gx) / QUAD.Ipitch * dt;
+    st.omega.y += (tqY - gy) / QUAD.Iyaw * dt;
+    st.omega.z += (tqZ - gz) / QUAD.Iroll * dt;
 
     var mag = st.omega.length();
     if (mag > 1e-7) {
@@ -1658,39 +2030,42 @@ function start() {
       st.quat.multiply(_dq).normalize();
     }
 
-    var demand = st.armed ? c.throttle : 0;
-    st.motor += (demand - st.motor) * (1 - Math.exp(-dt / CFG.thrustSpool));
-
-    // Battery: draw sags the pack, and a sagging pack gives less thrust.
-    var B = CFG.battery;
-    st.mah += (0.8 + st.motor * st.motor * 26) * dt;
-    var depth = clamp(st.mah / B.capacity, 0, 1);
-    var rest = B.full - depth * (B.full - B.empty);
-    st.volts = (rest - st.motor * B.sag * 0.22) * B.cells;
-    var thrustScale = clamp(0.68 + 0.32 * ((rest - 3.4) / (B.full - 3.4)), 0.45, 1);
-
+    /* ---- 10. forces: thrust along body up, gravity, anisotropic drag.
+     *          A quad is a bluff body belly-on (four prop discs and a
+     *          plate) and far cleaner nose-on, which is why a nose-down
+     *          dive runs away and a flat-out level run does not. ------- */
     _up.set(0, 1, 0).applyQuaternion(st.quat);
-    var acc = _v.copy(_up).multiplyScalar(st.motor * CFG.maxThrust * thrustScale);
-    acc.y -= CFG.gravity;
+    var acc = _v.copy(_up).multiplyScalar(Tsum / QUAD.massKg);
+    acc.y -= QUAD.gravity;
 
-    // Wind, with a slow gust cycle. Indoors both are zero.
-    var w = mapSpec.wind;
-    if (w.x || w.z || w.gust) {
-      windPhase += dt * 0.37;
-      var gust = 1 + Math.sin(windPhase) * 0.5 + Math.sin(windPhase * 2.3) * 0.3;
-      var alt = clamp(st.pos.y / 12, 0.25, 1.4);
-      acc.x += (w.x * gust + Math.sin(windPhase * 1.7) * w.gust) * alt * 0.55;
-      acc.z += (w.z * gust + Math.cos(windPhase * 1.3) * w.gust) * alt * 0.55;
-    }
-
-    var speed = st.vel.length();
-    if (speed > 1e-5) acc.addScaledVector(st.vel, -(CFG.dragLinear + CFG.dragQuad * speed));
+    var q = 0.5 * QUAD.rho;
+    _drag.set(-q * QUAD.cdaLateral * Math.abs(_airB.x) * _airB.x,
+              -q * QUAD.cdaAxial   * Math.abs(_airB.y) * _airB.y,
+              -q * QUAD.cdaLong    * Math.abs(_airB.z) * _airB.z);
+    _drag.applyQuaternion(st.quat);
+    acc.addScaledVector(_drag, 1 / QUAD.massKg);
 
     st.vel.addScaledVector(acc, dt);
     st.pos.addScaledVector(st.vel, dt);
 
     collide(dt);
     if (Run.state === 'live' || Run.state === 'countdown') st.flightTime += dt;
+  }
+
+  /* Resting cell voltage against state of charge. A Li-Po is flat across
+   * the middle of the pack and falls off a cliff at the end; a straight
+   * line from 4.2 to 3.4 would make the last third of the flight feel
+   * like the first. Five points, linearly interpolated. */
+  var OCV = [[0, 3.20], [0.1, 3.55], [0.2, 3.68], [0.4, 3.79],
+             [0.6, 3.86], [0.8, 3.95], [1, 4.20]];
+  function ocvPerCell(soc) {
+    for (var i = 1; i < OCV.length; i++) {
+      if (soc <= OCV[i][0]) {
+        var a = OCV[i - 1], b = OCV[i];
+        return a[1] + (b[1] - a[1]) * (soc - a[0]) / (b[0] - a[0]);
+      }
+    }
+    return OCV[OCV.length - 1][1];
   }
 
   function crash(impact) {
@@ -1716,10 +2091,18 @@ function start() {
         st.vel.y = -st.vel.y * CFG.bounce;
         if (Math.abs(st.vel.y) < 0.4) st.vel.y = 0;
       }
-      st.vel.x *= CFG.friction;
-      st.vel.z *= CFG.friction;
+      // Coulomb friction, not a per-step multiplier: mu * g * dt taken off
+      // the horizontal speed, so the result does not depend on the tick rate.
+      var hs = Math.hypot(st.vel.x, st.vel.z);
+      if (hs > 1e-4) {
+        var drop = CFG.frictionMu * QUAD.gravity * dt;
+        var k = drop >= hs ? 0 : (hs - drop) / hs;
+        st.vel.x *= k;
+        st.vel.z *= k;
+      }
       if (!st.armed) {
-        st.omega.multiplyScalar(0.85);
+        // Landed and disarmed: props stopped, the frame settles on its feet.
+        st.omega.multiplyScalar(Math.exp(-4.5 * dt));
         _dq.setFromEuler(new THREE.Euler(0, yawOf(st.quat), 0));
         st.quat.slerp(_dq, Math.min(1, dt * 4));
       }
@@ -1860,19 +2243,25 @@ function start() {
     // Recovery drill: thrown into the air inverted and spinning, harder each round.
     spawnTumble: function () {
       var r = this.rec.round;
-      var alt = Math.max(16, 52 - r * 3.5);
+      var alt = Math.max(14, 42 - r * 3);
       this.rec.alt = alt;
       this.rec.stable = 0;
       st.pos.set(mapSpec.spawn.x + (Math.random() - 0.5) * 14, alt, mapSpec.spawn.z + (Math.random() - 0.5) * 14);
-      st.vel.set((Math.random() - 0.5) * 6, -2 - Math.random() * 3, (Math.random() - 0.5) * 6);
-      st.quat.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      st.vel.set((Math.random() - 0.5) * 6, -4 - Math.random() * 5, (Math.random() - 0.5) * 6);
+      // Inverted, not merely random. Air mode will stop the spin for you but
+      // it never levels you, so the drill is: read the attitude, roll upright,
+      // and only then add throttle — power applied upside down flies you down.
+      st.quat.setFromEuler(new THREE.Euler(
+        (Math.random() - 0.5) * 1.0,
+        Math.random() * Math.PI * 2,
+        Math.PI + (Math.random() - 0.5) * 1.2, 'YXZ'));
       // A real tumble about a random axis — per-axis noise can cancel out and
       // hand you a gentle spawn that teaches nothing.
       var spin = (3.4 + r * 1.2) * (0.85 + Math.random() * 0.3);
       var axis = new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) * 0.5, Math.random() - 0.5);
       if (axis.lengthSq() < 1e-6) axis.set(0, 0, 1);
       st.omega.copy(axis.normalize()).multiplyScalar(spin);
-      st.motor = 0;
+      zeroMotors();
       st.armed = true;
       chaseInit = false;
       toast('ROUND ' + (r + 1), '#ffb020');
@@ -2238,12 +2627,17 @@ function start() {
     var bw = 76, bh = 4, bx = w - m - bw, by = m + 22;
     hx.strokeStyle = 'rgba(238,242,238,0.4)'; hx.lineWidth = 1;
     hx.strokeRect(bx, by, bw, bh);
-    var pct = clamp((cellV - 3.4) / (CFG.battery.full - 3.4), 0, 1);
+    // Real OSDs run the bar off consumed mAh, not voltage — voltage under
+    // load tells you about the sag, not about what is left in the pack.
+    var pct = clamp(1 - st.mah / CFG.battery.capacity, 0, 1);
     hx.fillStyle = battCol;
     hx.fillRect(bx + 1, by + 1, (bw - 2) * pct, bh - 2);
+    T(Math.round(st.mah) + ' MAH  ' + st.amps.toFixed(0) + 'A', w - m, m + 38,
+      { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
     T((Input.active === 'gamepad' ? 'PAD' : 'KBD') + ' · ' + Input.profile.name.toUpperCase() + ' · ' +
+      (Input.idleMode === 'airmode' ? 'AIR' : Input.idleMode === 'idle' ? 'IDLE' : 'MSTOP') + ' · ' +
       (camMode === 'fpv' ? 'FPV' : camMode === 'chase' ? 'CHASE' : 'LOS'),
-      w - m, m + 42, { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
+      w - m, m + 54, { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
 
     // Throttle, bottom left
     var tbH = Math.min(150, h * 0.26), tbW = 9;
@@ -2357,6 +2751,8 @@ function start() {
         Input.profile = RATE_PROFILES[(i + 1) % RATE_PROFILES.length];
         Store.data.rates = Input.profile.id; Store.save();
       } },
+    { label: 'Idle authority', value: function () { return idleModeName(); },
+      cycle: function () { cycleIdleMode(); } },
     { label: 'Prop in view', value: function () { return showArms ? 'On' : 'Off'; },
       cycle: function () { showArms = !showArms; Store.data.arms = showArms; Store.save(); } },
     { label: 'Throttle', value: function () { return Input.throttleMode === 'absolute' ? 'Stick position' : 'Ramped'; },
@@ -2419,6 +2815,7 @@ function start() {
       this.idx[1] = mi >= 0 ? mi : 0;
       var rp = RATE_PROFILES.filter(function (p) { return p.id === Store.data.rates; })[0];
       if (rp) Input.profile = rp;
+      if (IDLE_MODES.indexOf(Store.data.idleMode) >= 0) Input.idleMode = Store.data.idleMode;
     },
 
     scenario: function () { return SCENARIOS[this.idx[0]]; },
@@ -2500,6 +2897,9 @@ function start() {
         var i = RATE_PROFILES.indexOf(Input.profile);
         Input.profile = RATE_PROFILES[(i + 1) % RATE_PROFILES.length];
         Store.data.rates = Input.profile.id; Store.save(); Pause.render();
+      } },
+    { label: 'Idle authority', value: function () { return idleModeName(); }, act: function () {
+        cycleIdleMode(); Pause.render();
       } },
     { label: 'Prop in view', value: function () { return showArms ? 'On' : 'Off'; }, act: function () {
         showArms = !showArms; Store.data.arms = showArms; Store.save(); Pause.render();
@@ -2743,7 +3143,10 @@ function start() {
   requestAnimationFrame(frame);
 
   window.__sim = { st: st, Run: Run, Menu: Menu, Pause: Pause, Input: Input, cfg: CFG,
-    spec: function () { return mapSpec; }, cam: function () { return camMode; }, Sound: Sound };
+    spec: function () { return mapSpec; }, cam: function () { return camMode; }, Sound: Sound,
+    // Exposed so the flight model can be measured rather than taken on trust.
+    quad: QUAD, fc: FC, motors: MOTORS, kp: KP, profiles: RATE_PROFILES, bfRate: bfRate,
+    step: function (dt) { stepPhysics(dt); }, zeroFC: zeroMotors };
 }
 </script>
 </body>

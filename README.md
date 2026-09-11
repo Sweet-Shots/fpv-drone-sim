@@ -69,7 +69,7 @@ Each profile carries its own expo and stick smoothing.
 | Free Flight | No clock, no gates |
 | Time Trial | Three laps against the clock, gate splits live |
 | Gate Rush | 45 seconds; every gate taken adds four more |
-| Recovery Drill | Dropped inverted and tumbling — stop the spin, get upright, hold it before the ground arrives. Each round starts lower and spins harder |
+| Recovery Drill | Dropped inverted, tumbling and sinking. Air mode will stop the spin, but nothing levels you: read the attitude, roll upright, then power out. Each round starts lower and spins harder |
 | Line of Sight | The camera stays on the ground where you are standing, as at a real field |
 
 ## Locations
@@ -83,27 +83,55 @@ Best lap, most gates and most rounds are kept per location per session in
 
 ## Flight model
 
-- **Rates** are commanded, never angles. Commanded rates are reached through a
-  first-order lag (40–100 ms per axis, yaw heaviest), so the airframe carries
-  rotational momentum instead of snapping.
-- **Control authority follows the motors.** Torque comes from differential
-  thrust, so near zero throttle you have almost none — which is why a tumbling
-  quad has to be spooled up before it can be caught. This is the whole point of
-  the recovery drill.
-- **Thrust** is a single body-up force, ~2.6 g at full throttle, behind a 60 ms
-  motor spool. Hover sits near 38%.
-- **Battery** is a 4S pack that sags under draw and loses thrust as it drains;
-  flat ends the flight.
-- **Wind** is a per-location constant plus a gust cycle, stronger with altitude.
-  The hangar has none.
-- **Translation** adds gravity plus linear and quadratic drag, giving a terminal
-  velocity and carrying you wide out of turns.
-- **Collisions** with ground, pylons, walls, ceiling and gate rings all push
-  back; an impact above 9 m/s disarms you.
-- Physics runs on a fixed 240 Hz step decoupled from the render loop, so feel
-  does not change with frame rate.
+The aircraft is a 650 g 5-inch freestyle quad on a 4S 1300 mAh pack, flown in
+Betaflight acro mode. The model is built from that airframe rather than from
+feel-good constants, so the numbers below are consequences, not settings.
 
-Tuning lives in `CFG` and `RATE_PROFILES` at the top of the script.
+- **Rates** use Betaflight's own `applyBetaflightRates` — RC Rate, Super Rate and
+  RC Expo — so the three profiles are expressed the way you would actually set
+  them in the configurator. Real quads have switchable rate profiles; so does this.
+- **The rate loop is a PID controller**, not a curve. P and D act on gyro error
+  and gyro derivative, I is clamped and reset below `min_check`, output is capped
+  at Betaflight's `pidsum_limit`, and the result goes through the real QUADX
+  mixer with mix scaling and an idle clip. Roll reaches a commanded 420°/s in
+  67 ms with ~5% overshoot.
+- **Authority is emergent.** Torque comes from four individual motor thrusts, so
+  how much you have depends on where the mixer can put them — which is why the
+  **Idle authority** setting matters. It exposes three real Betaflight
+  configurations: `Air mode` (default, what a modern freestyle quad flies — full
+  authority at zero throttle), `Idle floor` (plain defaults; only the upward half
+  of each correction survives at the bottom of the stick), and `Motor stop`
+  (props actually stop below `min_check`, so there is no authority at all).
+- **Yaw is weak because of physics, not tuning.** Roll torque is differential
+  thrust on a 78 mm arm; yaw is only prop drag torque. Measured ratio 15:1.
+- **Thrust** follows RPM², with stick mapped onto `[motor_idle, 1]` and a per-motor
+  spool. Hover sits at **25%** stick; thrust-to-weight is 6.5:1 on the bench and
+  4.9:1 in flight once the pack sags.
+- **Props unload with airspeed.** Thrust falls as axial inflow approaches the
+  prop's geometric pitch speed, which is what really caps top speed and climb
+  rate — not drag.
+- **Drag is anisotropic**, in the body frame: a quad is a bluff body belly-on
+  (four prop discs) and far cleaner nose-on. A flat belly-down fall terminates at
+  13 m/s; a nose-down dive reaches 27 m/s. Level top speed is 32 m/s (115 km/h).
+- **The battery is electrical.** Current is drawn against a 7-point Li-Po
+  discharge curve through 16 mΩ of pack resistance; sag costs RPM and therefore
+  thrust, so a fresh pack punches harder. 6 minutes hovering, 32 seconds flat out.
+- **Wind is a velocity field**, not a shove: it acts through drag on airspeed,
+  with a 1/7-power boundary layer so it strengthens with altitude.
+- Also modelled: gyroscopic cross-coupling (Euler's equations), vortex-ring state
+  — which is what propwash actually is — aerodynamic rotational damping, ground
+  effect (honestly negligible at 1.1% for a 5" prop), a ±2000°/s gyro clip, and
+  Coulomb ground friction.
+- Physics runs on a fixed 240 Hz step decoupled from the render loop.
+
+Constants live in `QUAD` (airframe), `FC` (flight controller), `CFG` and
+`RATE_PROFILES` at the top of the script, each commented with its units and where
+the figure comes from.
+
+Two test suites back this up: `test2.js` covers behaviour and UI, and
+`physics-check.js` measures hover throttle, thrust-to-weight, per-axis step
+response, dive and flat-fall terminal velocities, top speed, endurance, sag, and
+the three idle modes, asserting each lands in a realistic range.
 
 ## HUD
 

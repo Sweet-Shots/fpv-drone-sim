@@ -189,6 +189,19 @@ same renderer and the same airframe, flown along a baked spline through a lit
 ring course, with three cinematic camera shots on rotation. It is a scripted
 line rather than an autopilot: repeatable, and honest about being a demo.
 
+Four entries, each opening its own page on the same dial:
+
+| | |
+| --- | --- |
+| **Play** | Mode, Place and Drone, then Launch |
+| **Options** | Sound, volume, quality, rates, idle authority, prop view, throttle and pitch stick |
+| **Help** | Every control, keyboard and gamepad side by side |
+| **Credits** | Made by Douglas Harvey for Drone Club — Made with love |
+
+`Esc` (or ○) steps back a page. The arc is sized from the viewport rather than
+from its neighbours, so it stays exactly the same circle on every page and at
+every selection — measured in the test suite, because it was not always true.
+
 ## HUD
 
 Betaflight-style OSD drawn straight on the video: no panels. Throttle bar with a

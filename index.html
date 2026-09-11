@@ -182,8 +182,10 @@
   .menu-left {
     position: relative;
     z-index: 1;
-    display: flex;
-    flex-direction: column;
+    /* Fixed rows: the tray cannot push the dial around as descriptions change
+       length, which is what made the arc breathe as you moved through it. */
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100%;
     width: min(56%, 620px);
     min-width: 0;
@@ -218,6 +220,7 @@
     transform-origin: left center;
     transition: transform 0.22s cubic-bezier(.22,.9,.3,1), opacity 0.22s, color 0.2s;
   }
+  .spoke[hidden] { display: none !important; }
   .spoke .lbl {
     font-family: var(--mono);
     font-size: 10.5px;
@@ -248,22 +251,119 @@
     color: var(--ink-faint);
     letter-spacing: -0.04em;
   }
-  .spoke.launch .val { color: var(--flag); }
+  .spoke.launch .val { color: var(--ink-dim); }
   .spoke.launch[data-focus="1"] .val { color: var(--flag); }
   .spoke.launch[data-focus="1"] .val::after { content: ''; }
   .spoke:focus-visible { outline: 1px solid var(--flag); outline-offset: -1px; }
 
-  .tray { display: flex; flex-direction: column; gap: 10px; padding-right: 18px; }
+  .tray {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 18px;
+    height: 196px;          /* fixed: the record exists only on one page */
+    overflow: hidden;
+  }
   .tray .desc {
     font-family: var(--mono);
     font-size: 12px;
     line-height: 1.7;
     color: var(--ink-dim);
     max-width: 54ch;
-    min-height: 3.4em;
+    height: 5.1em;          /* fixed, so the dial above never moves */
+    overflow: hidden;
+  }
+
+  .pagetitle {
+    margin-top: 12px;
+    font-family: var(--display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--flag);
+  }
+
+  /* --- Help / Credits pages --- */
+  #pagecontent {
+    position: absolute;
+    inset: 0;
+    padding-right: 18px;
+    overflow: auto;
+  }
+  #pagecontent[hidden] { display: none; }
+  .helpgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 26px; }
+  .helpcol h3 {
+    margin: 0 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--flag);
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 6px;
+  }
+  .helpcol dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+  .helpcol dt {
+    font-family: var(--sym);
+    font-size: 11px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .helpcol dd { margin: 0; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+  .helpnote {
+    grid-column: 1 / -1;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--rule);
+    padding-top: 8px;
+  }
+  .credits {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+  }
+  .credits p { margin: 0; }
+  .credits .ctag {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 10px;
+  }
+  .credits .cname {
+    font-family: var(--display);
+    font-size: clamp(38px, 5.4vw, 62px);
+    font-weight: 700;
+    line-height: 0.94;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .credits .cfor {
+    font-family: var(--display);
+    font-size: clamp(20px, 2.4vw, 28px);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--ink-dim);
+    margin-top: 8px;
+  }
+  .credits .cfor b { color: var(--flag); font-weight: 700; }
+  .credits .crule { width: 56px; height: 2px; background: var(--flag); margin: 26px 0 18px; }
+  .credits .clove {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
   }
   .tray .desc b { color: var(--ink); font-weight: 500; }
-  .trayfoot { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+  .trayfoot { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; min-height: 54px; }
 
   /* --- three-column selection board (pause screen still uses .opt/.setrow) --- */
   .board {
@@ -480,7 +580,9 @@
   @media (max-width: 860px) {
     .menu-left { width: 100%; padding-inline: 18px; }
     .menu-scrim { background: linear-gradient(100deg, var(--ground) 0%, rgba(11,12,14,0.93) 55%, rgba(11,12,14,0.72) 100%); }
-    .spoke .lbl { min-width: 78px; font-size: 9.5px; }
+    .tray { height: 168px; }
+    .spoke[hidden] { display: none !important; }
+  .spoke .lbl { min-width: 78px; font-size: 9.5px; }
     .spoke .val { font-size: 16px; }
     .spoke[data-focus="1"] .val { font-size: 21px; }
     .board { grid-template-columns: 1fr; }
@@ -508,6 +610,7 @@
     <div class="mast">
       <div class="lockup"><h1>Acro <em>FPV</em></h1></div>
       <div class="meta" id="m-meta"></div>
+          <div class="pagetitle" id="m-page">&nbsp;</div>
     </div>
 
     <div class="dial" id="dial">
@@ -515,6 +618,7 @@
         <path id="arcpath" d="" fill="none" stroke="rgba(242,236,226,0.13)" stroke-width="1"/>
         <path id="arcpath2" d="" fill="none" stroke="rgba(255,92,22,0.5)" stroke-width="2"/>
       </svg>
+      <div id="pagecontent" hidden></div>
     </div>
 
     <div class="tray">
@@ -3018,98 +3122,150 @@ function start() {
   var menuEl = document.getElementById('menu');
   var pauseEl = document.getElementById('pause');
 
-  /* Every row on the dial is the same shape: a label, a value, and a way to
-   * step through that value. Session and Location are rows too, which is why
-   * the board collapsed into one dial. */
-  var DIAL = [
-    { id: 'session', label: 'Session',
-      value: function () { return Menu.scenario().name; },
-      step: function (d) { Menu.stepList(Menu.sessions(), 'idxSession', d); },
-      brief: function () { return '<b>' + Menu.scenario().name + '</b> — ' + Menu.scenario().desc; } },
-    { id: 'location', label: 'Location',
-      value: function () { return Menu.mapSel().name; },
-      step: function (d) { Menu.stepList(MAPS, 'idxMap', d); },
-      brief: function () { return '<b>' + Menu.mapSel().name + '</b> — ' + Menu.mapSel().desc; } },
-    { id: 'mode', label: 'Flight mode',
-      value: function () { return Input.mode.name; },
-      step: function (d) {
+  /* Rows come in two shapes: one that steps through a value, and one that
+   * does something. Pages are just lists of them, so the dial is the single
+   * interaction for the whole menu. */
+  function valueRow(id, label, value, step, brief) {
+    return { id: id, label: label, value: value, step: step, brief: brief };
+  }
+  function actionRow(id, label, value, action, brief) {
+    // Action rows carry a fixed caption; accept it as plain text.
+    var v = typeof value === 'function' ? value : function () { return value; };
+    return { id: id, label: label, value: v, action: action, brief: brief, isAction: true };
+  }
+
+  var ROWS = {
+    // --- main ---
+    play: actionRow('play', '', 'Play ▸', function () { Menu.go('play'); },
+      function () { return 'Pick a session, a location and an aircraft, then fly.'; }),
+    options: actionRow('options', '', 'Options ▸', function () { Menu.go('options'); },
+      function () { return 'Sound, graphics, rates and the handling switches.'; }),
+    help: actionRow('help', '', 'Help ▸', function () { Menu.go('help'); },
+      function () { return 'Every control, for keyboard and for gamepad.'; }),
+    credits: actionRow('credits', '', 'Credits ▸', function () { Menu.go('credits'); },
+      function () { return 'Who made this.'; }),
+
+    // --- play ---
+    mode: valueRow('mode', 'Mode',
+      function () { return Menu.scenario().name; },
+      function (d) { Menu.stepList(Menu.sessions(), 'idxSession', d); },
+      function () { return '<b>' + Menu.scenario().name + '</b> — ' + Menu.scenario().desc; }),
+    place: valueRow('place', 'Place',
+      function () { return Menu.mapSel().name; },
+      function (d) { Menu.stepList(MAPS, 'idxMap', d); },
+      function () { return '<b>' + Menu.mapSel().name + '</b> — ' + Menu.mapSel().desc; }),
+    drone: valueRow('drone', 'Drone',
+      function () { return Input.mode.name; },
+      function (d) {
         var i = FLIGHT_MODES.indexOf(Input.mode);
         Input.mode = FLIGHT_MODES[(i + d + FLIGHT_MODES.length) % FLIGHT_MODES.length];
         Store.data.flightMode = Input.mode.id; Store.save();
         Menu.clampSession();
       },
-      brief: function () { return '<b>' + Input.mode.name + ' mode</b> — ' + Input.mode.desc; } },
-    { id: 'rates', label: 'Rates',
-      value: function () { return Input.profile.name + ' · ' + Input.profile.rate.roll + '°/s'; },
-      step: function (d) {
-        var i = RATE_PROFILES.indexOf(Input.profile);
-        Input.profile = RATE_PROFILES[(i + d + RATE_PROFILES.length) % RATE_PROFILES.length];
-        Store.data.rates = Input.profile.id; Store.save();
+      function () { return '<b>' + Input.mode.name + '</b> — ' + Input.mode.desc; }),
+    launch: actionRow('launch', '', 'Launch ▸', function () { Menu.launch(); },
+      function () { return 'Fly ' + Menu.scenario().name + ' at ' + Menu.mapSel().name + ' on the ' + Input.mode.name + ' airframe.'; }),
+
+    // --- options ---
+    sound: valueRow('sound', 'Sound',
+      function () { return Store.data.sound ? 'On' : 'Off'; },
+      function () { Store.data.sound = !Store.data.sound; Store.save(); Sound.setVolume(); },
+      function () { return 'Motors, airflow, gates and warnings, all synthesised at runtime.'; }),
+    volume: valueRow('volume', 'Volume',
+      function () { return Math.round(Store.data.volume * 100) + '%'; },
+      function (d) {
+        Store.data.volume = clamp(Math.round((Store.data.volume + d * 0.1) * 10) / 10, 0, 1);
+        Store.save(); Sound.setVolume();
       },
-      brief: function () { return '<b>' + Input.profile.name + ' rates</b> — ' + Input.profile.desc; } },
-    { id: 'gfx', label: 'Graphics',
-      value: function () { return GFX.name; },
-      step: function (d) {
+      function () { return 'Master level.'; }),
+    quality: valueRow('quality', 'Quality',
+      function () { return GFX.name; },
+      function (d) {
         var i = GFX_PRESETS.indexOf(GFX);
         GFX = GFX_PRESETS[(i + d + GFX_PRESETS.length) % GFX_PRESETS.length];
         Store.data.gfx = GFX.id; Store.save();
         applyGfx(true);
         Demo.rebuild();
       },
-      brief: function () {
-        return '<b>' + GFX.name + '</b> — ' + (GFX.id === 'low'
-          ? 'No shadows, sparse scenery, native resolution. For laptops and integrated graphics.'
+      function () {
+        return GFX.id === 'low'
+          ? '<b>Low</b> — no shadows, sparse scenery, native resolution. For laptops and integrated graphics.'
           : GFX.id === 'medium'
-            ? 'Shadows on, scenery thinned, resolution capped at 1.5×.'
-            : 'Everything on: shadows, full treeline, every light, 2× resolution.');
-      } },
-    { id: 'idle', label: 'Idle authority',
-      value: function () { return idleModeName(); },
-      step: function (d) { cycleIdleMode(d); },
-      brief: function () {
+            ? '<b>Medium</b> — shadows on, scenery thinned, resolution capped at 1.5×.'
+            : '<b>High</b> — shadows, full treeline, every light, 2× resolution.';
+      }),
+    rates: valueRow('rates', 'Rates',
+      function () { return Input.profile.name + ' · ' + Input.profile.rate.roll + '°/s'; },
+      function (d) {
+        var i = RATE_PROFILES.indexOf(Input.profile);
+        Input.profile = RATE_PROFILES[(i + d + RATE_PROFILES.length) % RATE_PROFILES.length];
+        Store.data.rates = Input.profile.id; Store.save();
+      },
+      function () { return '<b>' + Input.profile.name + '</b> — ' + Input.profile.desc; }),
+    idle: valueRow('idle', 'Idle authority',
+      function () { return idleModeName(); },
+      function (d) { cycleIdleMode(d); },
+      function () {
         return Input.idleMode === 'airmode'
           ? '<b>Air mode</b> — full control authority at zero throttle. What a modern freestyle quad flies.'
           : Input.idleMode === 'idle'
             ? '<b>Idle floor</b> — Betaflight defaults. At the bottom of the stick only half of each correction survives.'
-            : '<b>Motor stop</b> — the props actually stop below min_check, so there is no authority at all until you spool up.';
-      } },
-    { id: 'prop', label: 'Prop in view',
-      value: function () { return showArms ? 'On' : 'Off'; },
-      step: function () { showArms = !showArms; Store.data.arms = showArms; Store.save(); },
-      brief: function () { return Input.mode.hold
-        ? 'No effect in Camera mode — a gimballed camera sits below the props and never sees them.'
-        : 'Whether the front arms and prop tips clip the corners of the FPV frame, as they do on a real quad.'; } },
-    { id: 'pitchdir', label: 'Pitch stick',
-      value: function () { return Input.invertPitch ? 'Inverted' : 'Normal'; },
-      step: function () { Input.invertPitch = !Input.invertPitch; Store.data.invertPitch = Input.invertPitch; Store.save(); },
-      brief: function () { return Input.invertPitch
-        ? '<b>Inverted</b> — stick away pitches the nose up.'
-        : '<b>Normal</b> — stick away pitches the nose down and flies you forward, as on a real Mode 2 transmitter.'; } },
-    { id: 'throttle', label: 'Throttle',
-      value: function () { return Input.throttleMode === 'absolute' ? 'Stick position' : 'Ramped'; },
-      step: function () { Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute'; },
-      brief: function () { return Input.throttleMode === 'absolute'
-        ? 'The gimbal position IS the throttle, like a real transmitter.'
-        : 'Stick deflection ramps the throttle up or down and it stays where you leave it.'; } },
-    { id: 'sound', label: 'Sound',
-      value: function () { return Store.data.sound ? Math.round(Store.data.volume * 100) + '%' : 'Off'; },
-      step: function (d) {
-        if (!Store.data.sound) { Store.data.sound = true; Store.data.volume = 0.2; }
-        else {
-          Store.data.volume = Math.round((Store.data.volume + d * 0.2) * 10) / 10;
-          if (Store.data.volume > 1.001) { Store.data.volume = 0; Store.data.sound = false; }
-          else if (Store.data.volume < 0.001) { Store.data.sound = false; Store.data.volume = 0; }
-        }
-        Store.save(); Sound.setVolume();
-      },
-      brief: function () { return 'Motors, airflow, gates and warnings, all synthesised at runtime.'; } },
-    { id: 'launch', label: '', launch: true,
-      value: function () { return 'Launch ▸'; },
-      step: function () {},
-      brief: function () { return 'Start the session.'; } }
+            : '<b>Motor stop</b> — the props stop below min_check, so there is no authority at all until you spool up.';
+      }),
+    prop: valueRow('prop', 'Prop in view',
+      function () { return showArms ? 'On' : 'Off'; },
+      function () { showArms = !showArms; Store.data.arms = showArms; Store.save(); },
+      function () {
+        return Input.mode.hold
+          ? 'No effect on the Camera airframe — a gimballed camera sits below the props and never sees them.'
+          : 'Whether the front arms and prop tips clip the corners of the FPV frame, as they do on a real quad.';
+      }),
+    throttle: valueRow('throttle', 'Throttle',
+      function () { return Input.throttleMode === 'absolute' ? 'Stick position' : 'Ramped'; },
+      function () { Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute'; },
+      function () {
+        return Input.throttleMode === 'absolute'
+          ? 'The gimbal position IS the throttle, like a real transmitter.'
+          : 'Stick deflection ramps the throttle and it stays where you leave it.';
+      }),
+    pitchdir: valueRow('pitchdir', 'Pitch stick',
+      function () { return Input.invertPitch ? 'Inverted' : 'Normal'; },
+      function () { Input.invertPitch = !Input.invertPitch; Store.data.invertPitch = Input.invertPitch; Store.save(); },
+      function () {
+        return Input.invertPitch
+          ? '<b>Inverted</b> — stick away pitches the nose up.'
+          : '<b>Normal</b> — stick away pitches the nose down and flies you forward, as on a real Mode 2 transmitter.';
+      }),
+
+    back: actionRow('back', '', '◂ Back', function () { Menu.go('main'); },
+      function () { return 'Back to the main menu.'; })
+  };
+
+  var PAGES = {
+    main:    { title: '', rows: ['play', 'options', 'help', 'credits'] },
+    play:    { title: 'Play', rows: ['mode', 'place', 'drone', 'launch', 'back'] },
+    options: { title: 'Options', rows: ['sound', 'volume', 'quality', 'rates', 'idle', 'prop', 'throttle', 'pitchdir', 'back'] },
+    help:    { title: 'Help', content: 'help' },
+    credits: { title: 'Credits', content: 'credits' }
+  };
+
+  var HELP_KEYBOARD = [
+    ['W S / ↑ ↓', 'Pitch'], ['A D / ← →', 'Roll'], ['Q E', 'Yaw'],
+    ['Shift Ctrl', 'Throttle · up/down'], ['Space', 'Arm / disarm'], ['R', 'Reset drone'],
+    ['F', 'Flight mode'], ['N', 'Rates'], ['B', 'Beeper'], ['C', 'Camera view'],
+    ['V', 'Prop in view'], ['T', 'Throttle mode'], ['[ ]', 'Camera angle / gimbal'],
+    ['H', 'Hide hints'], ['M', 'Mute'], ['Backspace ×2', 'Restart run'], ['Esc', 'Pause']
+  ];
+  var HELP_GAMEPAD = [
+    ['Left stick', 'Throttle / yaw'], ['Right stick', 'Pitch / roll'],
+    ['✕', 'Arm / disarm'], ['○', 'Reset drone'], ['□', 'Prop in view'], ['△', 'Camera view'],
+    ['L1', 'Flight mode'], ['R1', 'Rates'], ['L2', 'Beeper'], ['R2', 'Turtle mode'],
+    ['L2 R2', 'Gimbal tilt (Camera)'], ['Share ×2', 'Restart run'], ['Options', 'Pause'],
+    ['D-pad', 'Menu navigation']
   ];
 
   var Menu = {
+    page: 'main',
     focus: 0,
     idxSession: 0,
     idxMap: 0,
@@ -3128,25 +3284,30 @@ function start() {
       var n = list.length;
       this[key] = (this[key] + d + n) % n;
     },
+    rows: function () { return (PAGES[this.page].rows || []).map(function (id) { return ROWS[id]; }); },
+    isContent: function () { return !!PAGES[this.page].content; },
 
     build: function () {
       var self = this;
       var dial = document.getElementById('dial');
-      DIAL.forEach(function (row, i) {
+      // One button per row id; pages show and hide them.
+      Object.keys(ROWS).forEach(function (id) {
+        var row = ROWS[id];
         var b = document.createElement('button');
         b.type = 'button';
-        b.className = 'spoke' + (row.launch ? ' launch' : '');
-        b.innerHTML = '<span class="lbl">' + row.label + '</span><span class="val"></span>';
+        b.className = 'spoke' + (row.isAction ? ' launch' : '');
+        b.innerHTML = '<span class="lbl"></span><span class="val"></span>';
         b.addEventListener('click', function () {
-          if (self.focus === i) { if (row.launch) self.launch(); else { row.step(1); Sound.select(); } }
-          else { self.focus = i; Sound.move(); }
-          self.render();
+          var rows = self.rows();
+          var i = rows.indexOf(row);
+          if (i < 0) return;
+          if (self.focus === i) self.activate();
+          else { self.focus = i; Sound.move(); self.render(); }
         });
         dial.appendChild(b);
-        self.els.push(b);
+        row.el = b;
       });
 
-      // Restore the last session's choices.
       var rp = RATE_PROFILES.filter(function (x) { return x.id === Store.data.rates; })[0];
       if (rp) Input.profile = rp;
       Input.mode = flightModeById(Store.data.flightMode);
@@ -3160,71 +3321,125 @@ function start() {
       applyGfx(false);
     },
 
-    /* The dial: rows are spaced evenly down the screen and pushed right by
-     * the half-ellipse they sit on, so the arc reads as a semicircle without
-     * the crowding a constant-angle layout gets at its ends. */
+    go: function (page) {
+      this.page = page;
+      this.focus = 0;
+      Sound.select();
+      this.render();
+    },
+
+    /* Rows are spaced evenly and pushed right by the half-ellipse they sit on.
+     * The ellipse is sized from the dial box, never from the row count, so the
+     * arc is exactly the same circle on every page and at every selection. */
     layout: function () {
       var dial = document.getElementById('dial');
       var h = dial.clientHeight || 420;
       var w = dial.clientWidth || 420;
-      var n = DIAL.length;
-      var rowH = Math.max(26, Math.min(40, (h - 30) / n));
-      var Ry = (n / 2) * rowH + rowH * 0.6;
-      var Rx = Math.min(w * 0.22, 104);
+      // The arc is sized from the VIEWPORT, never from the dial box. Anything
+      // measured from siblings — a record that only exists on one page, a
+      // description of a different length, a font that swaps in late — makes
+      // the circle breathe as you move through it.
+      var Ry = clamp(window.innerHeight * 0.30, 150, 300);
+      var Rx = clamp(window.innerHeight * 0.135, 68, 104);
       var cx = 18;
       var cy = h / 2;
+      var rows = this.rows();
+      var n = rows.length;
+      var rowH = n ? clamp((2 * Ry - 44) / Math.max(n, 4), 26, 46) : 40;
       var self = this;
 
-      DIAL.forEach(function (row, i) {
-        // The list is fixed and centred; moving the focus highlights a row
-        // rather than rotating the dial, so it can never run off the panel.
+      Object.keys(ROWS).forEach(function (id) { ROWS[id].el.hidden = true; });
+      rows.forEach(function (row, i) {
+        var el = row.el;
+        el.hidden = false;
         var dy = (i - (n - 1) / 2) * rowH;
-        var el = self.els[i];
         var k = clamp(dy / Ry, -1, 1);
         var x = cx + Rx * Math.sqrt(Math.max(0, 1 - k * k));
-        var y = cy + dy;
-        var off = Math.abs(k);
-        el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + (y - rowH / 2).toFixed(1) + 'px)';
-        el.style.opacity = (i === self.focus ? 1 : 0.72 - off * 0.18).toFixed(3);
-        el.style.pointerEvents = 'auto';
+        el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + (cy + dy - rowH / 2).toFixed(1) + 'px)';
+        el.style.opacity = (i === self.focus ? 1 : 0.72 - Math.abs(k) * 0.18).toFixed(3);
         el.setAttribute('data-focus', i === self.focus ? '1' : '0');
+        el.querySelector('.lbl').textContent = row.label || '';
+        el.querySelector('.val').textContent = row.value();
       });
 
-      // The guide arc the rows are threaded on, plus a lit segment at the focus.
-      var p1 = [], p2 = [];
+      var p1 = [];
       for (var t = -1; t <= 1.0001; t += 0.04) {
         p1.push((cx + Rx * Math.sqrt(Math.max(0, 1 - t * t))).toFixed(1) + ',' + (cy + t * Ry).toFixed(1));
       }
-      var fk = ((this.focus - (n - 1) / 2) * rowH) / Ry;
-      for (var u = fk - 0.075; u <= fk + 0.075; u += 0.015) {
-        var uu = clamp(u, -1, 1);
-        p2.push((cx + Rx * Math.sqrt(Math.max(0, 1 - uu * uu))).toFixed(1) + ',' + (cy + uu * Ry).toFixed(1));
+      var p2 = [];
+      if (n) {
+        var fk = clamp(((this.focus - (n - 1) / 2) * rowH) / Ry, -1, 1);
+        for (var u = fk - 0.075; u <= fk + 0.075; u += 0.015) {
+          var uu = clamp(u, -1, 1);
+          p2.push((cx + Rx * Math.sqrt(Math.max(0, 1 - uu * uu))).toFixed(1) + ',' + (cy + uu * Ry).toFixed(1));
+        }
       }
       var svg = dial.querySelector('.dial-arc');
       svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
       document.getElementById('arcpath').setAttribute('d', 'M' + p1.join(' L'));
-      document.getElementById('arcpath2').setAttribute('d', 'M' + p2.join(' L'));
+      document.getElementById('arcpath2').setAttribute('d', p2.length ? 'M' + p2.join(' L') : '');
+    },
+
+    renderContent: function () {
+      var box = document.getElementById('pagecontent');
+      var kind = PAGES[this.page].content;
+      if (!kind) { box.hidden = true; return; }
+      box.hidden = false;
+      if (kind === 'help') {
+        var col = function (title, list) {
+          return '<div class="helpcol"><h3>' + title + '</h3><dl>' + list.map(function (b) {
+            return '<dt>' + b[0] + '</dt><dd>' + b[1] + '</dd>';
+          }).join('') + '</dl></div>';
+        };
+        box.innerHTML = '<div class="helpgrid">' +
+          col('Keyboard', HELP_KEYBOARD) + col('Gamepad', HELP_GAMEPAD) +
+          '<p class="helpnote">Both work at once and neither is required — a gamepad takes over the moment ' +
+          'you move a stick, and the keyboard takes it straight back. Flying uses only the two sticks; the ' +
+          'shoulder buttons are AUX switches, exactly as on a real transmitter.</p></div>';
+      } else {
+        box.innerHTML = '<div class="credits">' +
+          '<p class="ctag">Made by</p>' +
+          '<p class="cname">Douglas Harvey</p>' +
+          '<p class="cfor">for <b>Drone Club</b></p>' +
+          '<div class="crule"></div>' +
+          '<p class="clove">Made with love</p></div>';
+      }
     },
 
     render: function () {
       this.clampSession();
-      var self = this;
-      DIAL.forEach(function (row, i) {
-        self.els[i].querySelector('.val').textContent = row.value();
-      });
+      var content = this.isContent();
+
+      // Update everything that can affect layout FIRST, then measure. The
+      // title keeps its space even when empty; a header that changes height
+      // moves the dial, and a dial that moves resizes the arc.
+      var pt = document.getElementById('m-page');
+      pt.textContent = PAGES[this.page].title || '\u00a0';
+      pt.style.visibility = PAGES[this.page].title ? 'visible' : 'hidden';
+      this.renderContent();
       this.layout();
 
-      document.getElementById('briefdesc').innerHTML = DIAL[this.focus].brief();
+      var rows = this.rows();
+      var brief = content
+        ? (this.page === 'help' ? 'Press Enter or Esc to go back.' : 'Press Enter or Esc to go back.')
+        : (rows[this.focus] ? rows[this.focus].brief() : '');
+      document.getElementById('briefdesc').innerHTML = brief;
+
       document.getElementById('m-meta').innerHTML =
-        Input.mode.name.toUpperCase() + ' MODE &middot; <b>' + Input.profile.name.toUpperCase() + '</b> RATES &middot; 4S 1300' +
+        Input.mode.name.toUpperCase() + ' &middot; <b>' + Input.profile.name.toUpperCase() + '</b> RATES &middot; 4S 1300' +
         (Input.mode.selfLevel ? ' &middot; SELF-LEVELLING' : ' &middot; NO SELF-LEVEL');
 
-      var sc = this.scenario(), mp = this.mapSel();
-      var rec = Store.record(mp.id, sc.id);
-      var label = sc.id === 'rush' ? 'Most gates' : sc.id === 'recover' ? 'Best rounds' : sc.id === 'free' ? '' : 'Best lap';
+      // The record only means something once a session and place are picked.
       var box = document.getElementById('briefrecord');
-      box.innerHTML = !label ? '' : label + '<span class="t"' + (rec === undefined ? ' style="color:var(--ink-faint)"' : '') + '>' +
-        (rec === undefined ? 'not set' : (sc.id === 'rush' || sc.id === 'recover' ? rec : fmtTime(rec))) + '</span>';
+      if (this.page === 'play') {
+        var sc = this.scenario(), mp = this.mapSel();
+        var rec = Store.record(mp.id, sc.id);
+        var label = sc.id === 'rush' ? 'Most gates' : sc.id === 'recover' ? 'Best rounds' : sc.id === 'free' ? '' : 'Best lap';
+        box.innerHTML = !label ? '' : label + '<span class="t"' + (rec === undefined ? ' style="color:var(--ink-faint)"' : '') + '>' +
+          (rec === undefined ? 'not set' : (sc.id === 'rush' || sc.id === 'recover' ? rec : fmtTime(rec))) + '</span>';
+      } else {
+        box.innerHTML = '';
+      }
 
       document.getElementById('menubinds').innerHTML = Input.bindings('menu').map(function (b) {
         return '<span><b>' + b[0] + '</b>' + b[1] + '</span>';
@@ -3237,17 +3452,31 @@ function start() {
     },
 
     move: function (dx, dy) {
+      if (this.isContent()) { if (dx || dy) return; }
+      var rows = this.rows();
       if (dy) {
-        this.focus = clamp(this.focus + dy, 0, DIAL.length - 1);
+        this.focus = clamp(this.focus + dy, 0, rows.length - 1);
         Sound.move();
-      } else if (dx) {
-        DIAL[this.focus].step(dx);
+      } else if (dx && rows[this.focus] && rows[this.focus].step) {
+        rows[this.focus].step(dx);
         Sound.select();
       }
       this.render();
     },
 
-    activate: function () { this.launch(); },
+    activate: function () {
+      if (this.isContent()) { this.go('main'); return; }
+      var row = this.rows()[this.focus];
+      if (!row) return;
+      if (row.isAction) row.action();
+      else { row.step(1); Sound.select(); this.render(); }
+    },
+
+    back: function () {
+      if (this.page === 'main') return false;
+      this.go('main');
+      return true;
+    },
 
     launch: function () {
       Sound.unlock();
@@ -3264,7 +3493,11 @@ function start() {
       pauseEl.hidden = true;
       Run.state = 'menu';
       Sound.stopFlight();
+      this.page = 'main';
+      this.focus = 0;
       this.render();
+      var self = this;
+      requestAnimationFrame(function () { self.layout(); });
       Demo.start();
     }
   };
@@ -3370,6 +3603,7 @@ function start() {
         if (code === 'ArrowLeft' || code === 'KeyA') { Menu.move(-1, 0); return true; }
         if (code === 'ArrowRight' || code === 'KeyD') { Menu.move(1, 0); return true; }
         if (code === 'Enter' || code === 'Space') { Menu.activate(); return true; }
+        if (code === 'Escape' || code === 'Backspace') { if (!Menu.back()) Sound.back(); return true; }
         return true;
       }
       return false;
@@ -3723,6 +3957,7 @@ function start() {
         if (n.left) Menu.move(-1, 0);
         if (n.right) Menu.move(1, 0);
         if (n.select) Menu.activate();
+        if (n.back) { if (!Menu.back()) Sound.back(); }
       }
       hx.clearRect(0, 0, window.innerWidth, window.innerHeight);
       if (Demo.active && pauseEl.hidden) Demo.update(dt);
@@ -3801,6 +4036,12 @@ function start() {
   menuEl.hidden = false;
   Demo.start();
   window.addEventListener('resize', function () { if (!menuEl.hidden) Menu.layout(); });
+  // Web fonts swap in after first paint and change the header's height, so
+  // measure again once they have landed.
+  requestAnimationFrame(function () { if (!menuEl.hidden) Menu.layout(); });
+  if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+    document.fonts.ready.then(function () { if (!menuEl.hidden) Menu.layout(); });
+  }
   requestAnimationFrame(frame);
 
   window.__cam = camera;

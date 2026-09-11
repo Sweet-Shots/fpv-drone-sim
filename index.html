@@ -167,7 +167,105 @@
   .rule { height: 1px; background: var(--rule); }
   .rule.strong { background: var(--rule-strong); }
 
-  /* --- three-column selection board --- */
+  /* ============ radial dial menu, with the demo flight behind ============
+     The page is one canvas: the menu owns the left, and the right stays
+     clear so the showcase flight reads as the background it is. */
+  #menu { background: none; }
+  .menu-scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(100deg, var(--ground) 0%, var(--ground) 26%,
+        rgba(11,12,14,0.92) 40%, rgba(11,12,14,0.55) 56%, rgba(11,12,14,0.12) 72%, rgba(11,12,14,0) 88%);
+  }
+  .menu-left {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: min(56%, 620px);
+    min-width: 0;
+    padding: clamp(18px, 3.5vh, 40px) 0 clamp(16px, 3vh, 32px) clamp(20px, 4vw, 54px);
+  }
+  .menu-left .mast { display: block; }
+  .menu-left .meta { text-align: left; margin-top: 8px; }
+
+  .dial {
+    position: relative;
+    flex: 1;
+    min-height: 260px;
+    margin-left: -6px;
+  }
+  .dial-arc { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+
+  .spoke {
+    position: absolute;
+    left: 0; top: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 4px 14px 4px 12px;
+    border: 0;
+    border-left: 2px solid transparent;
+    background: none;
+    color: var(--ink-dim);
+    font: inherit;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    transform-origin: left center;
+    transition: transform 0.22s cubic-bezier(.22,.9,.3,1), opacity 0.22s, color 0.2s;
+  }
+  .spoke .lbl {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    min-width: 104px;
+  }
+  .spoke .val {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 19px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .spoke[data-focus="1"] {
+    color: var(--ink);
+    border-left-color: var(--flag);
+    background: linear-gradient(90deg, rgba(255,92,22,0.16), rgba(255,92,22,0));
+  }
+  .spoke[data-focus="1"] .lbl { color: var(--flag); }
+  .spoke[data-focus="1"] .val { font-size: 27px; color: var(--ink); }
+  .spoke[data-focus="1"] .val::after {
+    content: ' ‹ ›';
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: -0.04em;
+  }
+  .spoke.launch .val { color: var(--flag); }
+  .spoke.launch[data-focus="1"] .val { color: var(--flag); }
+  .spoke.launch[data-focus="1"] .val::after { content: ''; }
+  .spoke:focus-visible { outline: 1px solid var(--flag); outline-offset: -1px; }
+
+  .tray { display: flex; flex-direction: column; gap: 10px; padding-right: 18px; }
+  .tray .desc {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--ink-dim);
+    max-width: 54ch;
+    min-height: 3.4em;
+  }
+  .tray .desc b { color: var(--ink); font-weight: 500; }
+  .trayfoot { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+
+  /* --- three-column selection board (pause screen still uses .opt/.setrow) --- */
   .board {
     display: grid;
     grid-template-columns: 1.15fr 1fr 1fr;
@@ -273,17 +371,17 @@
   .brief .desc b { color: var(--ink); font-weight: 500; }
   .record {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 10.5px;
     color: var(--ink-faint);
-    text-align: right;
-    letter-spacing: 0.06em;
-    line-height: 1.9;
+    letter-spacing: 0.14em;
+    line-height: 1.6;
     white-space: nowrap;
+    text-transform: uppercase;
   }
   .record .t {
     display: block;
     font-family: var(--display);
-    font-size: 30px;
+    font-size: 26px;
     font-weight: 700;
     letter-spacing: 0.02em;
     color: var(--amber);
@@ -380,6 +478,11 @@
   }
 
   @media (max-width: 860px) {
+    .menu-left { width: 100%; padding-inline: 18px; }
+    .menu-scrim { background: linear-gradient(100deg, var(--ground) 0%, rgba(11,12,14,0.93) 55%, rgba(11,12,14,0.72) 100%); }
+    .spoke .lbl { min-width: 78px; font-size: 9.5px; }
+    .spoke .val { font-size: 16px; }
+    .spoke[data-focus="1"] .val { font-size: 21px; }
     .board { grid-template-columns: 1fr; }
     .col { border-right: 0; border-bottom: 1px solid var(--rule); }
     .col:last-child { border-bottom: 0; }
@@ -400,38 +503,28 @@
 
 <!-- ============================ main menu ============================ -->
 <div class="screen" id="menu" hidden>
-  <svg id="gateglyph" viewBox="0 0 200 200" fill="none" aria-hidden="true">
-    <circle cx="100" cy="88" r="68" stroke="var(--flag)" stroke-width="7"/>
-    <circle cx="100" cy="88" r="54" stroke="var(--flag)" stroke-width="2"/>
-    <path d="M58 140 L48 196 M142 140 L152 196" stroke="var(--flag)" stroke-width="7"/>
-  </svg>
-  <div class="wrap">
+  <div class="menu-scrim"></div>
+  <div class="menu-left">
     <div class="mast">
       <div class="lockup"><h1>Acro <em>FPV</em></h1></div>
-      <div class="meta">
-        RATE-MODE FLIGHT TRAINER<br>
-        <b id="m-rates">SPORT</b> RATES &middot; <b id="m-batt">4S</b> &middot; NO SELF-LEVEL
-      </div>
+      <div class="meta" id="m-meta"></div>
     </div>
 
-    <div class="board">
-      <div class="col" id="col-mode"><h2>Session</h2></div>
-      <div class="col" id="col-map"><h2>Location</h2></div>
-      <div class="col" id="col-setup"><h2>Setup</h2></div>
+    <div class="dial" id="dial">
+      <svg class="dial-arc" viewBox="0 0 400 800" preserveAspectRatio="none" aria-hidden="true">
+        <path id="arcpath" d="" fill="none" stroke="rgba(242,236,226,0.13)" stroke-width="1"/>
+        <path id="arcpath2" d="" fill="none" stroke="rgba(255,92,22,0.5)" stroke-width="2"/>
+      </svg>
     </div>
 
-    <div class="brief">
+    <div class="tray">
       <div class="desc" id="briefdesc"></div>
-      <div class="record" id="briefrecord"></div>
+      <div class="trayfoot">
+        <div class="record" id="briefrecord"></div>
+        <div class="device" id="devbadge"><span class="dot"></span><b>Keyboard</b></div>
+      </div>
+      <div class="binds" id="menubinds"></div>
     </div>
-
-    <div class="rule"></div>
-
-    <div class="foot">
-      <button class="go" id="startbtn" type="button">Launch <kbd id="gokey">Enter</kbd></button>
-      <div class="device" id="devbadge"><span class="dot"></span><b>Keyboard</b></div>
-    </div>
-    <div class="binds" id="menubinds"></div>
   </div>
 </div>
 
@@ -643,9 +736,10 @@ function bfRate(x, rcRate, superRate, expo) {
 var IDLE_MODES = ['motorstop', 'idle', 'airmode'];
 var IDLE_MODE_NAMES = { motorstop: 'Motor stop', idle: 'Idle floor', airmode: 'Air mode' };
 function idleModeName() { return IDLE_MODE_NAMES[Input.idleMode]; }
-function cycleIdleMode() {
+function cycleIdleMode(d) {
   var i = IDLE_MODES.indexOf(Input.idleMode);
-  Input.idleMode = IDLE_MODES[(i + 1) % IDLE_MODES.length];
+  d = d || 1;
+  Input.idleMode = IDLE_MODES[(i + d + IDLE_MODES.length) % IDLE_MODES.length];
   Store.data.idleMode = Input.idleMode;
   Store.save();
 }
@@ -656,6 +750,54 @@ RATE_PROFILES.forEach(function (p) {
              roll:  Math.round(bfRate(1, p.rc.roll,  p.sup.roll,  p.expo.roll)),
              yaw:   Math.round(bfRate(1, p.rc.yaw,   p.sup.yaw,   p.expo.yaw)) };
 });
+
+/* Betaflight flies one of these at a time, selected from an AUX switch.
+ * ACRO is rate mode: sticks command rotation and nothing levels you.
+ * ANGLE is self-levelling: stick deflection is a target LEAN ANGLE and the
+ * quad returns to level when you let go. CAMERA is what a DJI-style camera
+ * drone does — angle mode plus altitude hold and velocity braking, so
+ * releasing the sticks parks it in the air. */
+var FLIGHT_MODES = [
+  { id: 'acro', name: 'Acro', code: 'F1', selfLevel: false,
+    desc: 'Rate mode. Sticks command rotation, nothing levels you, and the quad holds any attitude you leave it in.' },
+  { id: 'angle', name: 'Angle', code: 'F2', selfLevel: true, maxTilt: 38, levelP: 7.5,
+    desc: 'Self-levelling. Stick deflection is a lean angle, and centring the sticks rolls you back to level.' },
+  { id: 'camera', name: 'Camera', code: 'F3', selfLevel: true, maxTilt: 28, levelP: 6.5, hold: true,
+    desc: 'Angle mode plus altitude hold and braking, like a camera drone. Up/down, left/right, and yaw to turn — let go and it parks.' }
+];
+function flightModeById(id) {
+  for (var i = 0; i < FLIGHT_MODES.length; i++) if (FLIGHT_MODES[i].id === id) return FLIGHT_MODES[i];
+  return FLIGHT_MODES[0];
+}
+
+/* Self-levelling / hold gains. */
+var STAB = {
+  levelMaxRate: 500 * Math.PI / 180,  // rad/s  outer-loop output clamp
+  maxClimb: 3.5,                      // m/s    camera-mode climb/descend command
+  altP: 0.9,                          // 1/s    altitude error -> target climb rate
+  climbP: 0.16,                       // throttle per (m/s) of climb-rate error
+  climbI: 0.22,                       // throttle per (m/s . s)
+  climbILimit: 0.45,
+  brakeP: 0.16,                       // rad of lean per (m/s) of unwanted drift
+  brakeMax: 0.30                      // rad  ~17 deg of braking lean
+};
+
+/* Graphics presets. Each one is a real cost lever: resolution, whether the
+ * sun casts shadows at all, how much scenery gets built, and how many point
+ * lights a material has to loop over. */
+var GFX_PRESETS = [
+  { id: 'low', name: 'Low', dpr: 1.0, shadows: false, shadowMap: 1024,
+    trees: 34, lights: 1, discs: false, scanlines: false, fogScale: 0.55, stars: 500 },
+  { id: 'medium', name: 'Medium', dpr: 1.5, shadows: true, shadowMap: 1024,
+    trees: 70, lights: 3, discs: true, scanlines: true, fogScale: 0.85, stars: 900 },
+  { id: 'high', name: 'High', dpr: 2.0, shadows: true, shadowMap: 1536,
+    trees: 120, lights: 6, discs: true, scanlines: true, fogScale: 1.0, stars: 1400 }
+];
+var GFX = GFX_PRESETS[2];
+function gfxById(id) {
+  for (var i = 0; i < GFX_PRESETS.length; i++) if (GFX_PRESETS[i].id === id) return GFX_PRESETS[i];
+  return GFX_PRESETS[2];
+}
 
 var MAPS = [
   { id: 'field', name: 'Sunset Field', code: 'M1', light: 'day',
@@ -684,7 +826,7 @@ var SCENARIOS = [
  * ================================================================== */
 var Store = {
   key: 'acrofpv.v2',
-  data: { rates: 'sport', idleMode: 'airmode', map: 'field', scenario: 'race', arms: true, volume: 0.7, sound: true, records: {} },
+  data: { rates: 'sport', idleMode: 'airmode', flightMode: 'acro', invertPitch: false, gfx: 'high', map: 'field', scenario: 'race', arms: true, volume: 0.7, sound: true, records: {} },
   load: function () {
     try {
       var raw = localStorage.getItem(this.key);
@@ -870,7 +1012,7 @@ var Input = {
   padName: '',
   gamepadBlocked: false,
   keys: Object.create(null),
-  ctl: { throttle: 0, yaw: 0, pitch: 0, roll: 0 },
+  ctl: { throttle: 0, yaw: 0, pitch: 0, roll: 0, climb: 0 },
   throttleMode: 'absolute',
   profile: RATE_PROFILES[1],
   /* What the flight controller can do at the bottom of the throttle. These
@@ -894,6 +1036,8 @@ var Input = {
    *   upward whenever you ask for a big correction down low. AIR MODE and
    *   MOTOR_STOP are mutually exclusive in the firmware, as they are here. */
   idleMode: 'airmode',
+  mode: FLIGHT_MODES[0],
+  invertPitch: false,
   edges: {},
   nav: {},
   _prevButtons: [],
@@ -919,6 +1063,9 @@ var Input = {
       else if (k === 'KeyC') hooks.camera();
       else if (k === 'KeyV') hooks.arms();
       else if (k === 'KeyT') hooks.throttleMode();
+      else if (k === 'KeyF') hooks.flightMode();
+      else if (k === 'KeyN') hooks.rates();
+      else if (k === 'KeyB') hooks.beeper();
       else if (k === 'KeyH') hooks.hint();
       else if (k === 'KeyM') hooks.mute();
       else if (k === 'BracketLeft') hooks.tilt(-1);
@@ -986,6 +1133,7 @@ var Input = {
   update: function (dt, inMenu) {
     var e = this.edges;
     e.arm = e.resetDrone = e.camera = e.arms = e.pause = false;
+    e.flightMode = e.rates = e.beeper = e.turtle = false;
     var n = this.nav;
     n.up = n.down = n.left = n.right = n.select = n.back = false;
 
@@ -1017,14 +1165,22 @@ var Input = {
             else if (b === 15) n.right = true;
             else if (b === 9) e.pause = true;
           } else {
+            // Flying a quad takes exactly four axes — two gimbals. Everything
+            // else on a real transmitter is an AUX switch, and that is what
+            // these are: mode, rates, beeper and turtle are all AUX channels.
             if (b === 0) e.arm = true;
             else if (b === 1) e.resetDrone = true;
             else if (b === 2) e.arms = true;
             else if (b === 3) e.camera = true;
+            else if (b === 4) e.flightMode = true;   // L1  AUX: flight mode
+            else if (b === 5) e.rates = true;        // R1  AUX: rate profile
+            else if (b === 6) e.beeper = true;       // L2  AUX: lost-model beeper
+            else if (b === 7) e.turtle = true;       // R2  AUX: turtle mode
             else if (b === 8) this.restartPressed();
             else if (b === 9) e.pause = true;
           }
         }
+        if (b === 7) this.turtleHeld = pressed;
         this._prevButtons[b] = pressed;
       }
 
@@ -1047,8 +1203,15 @@ var Input = {
       if (this.active === 'gamepad') {
         this.ctl.yaw = lx;
         this.ctl.roll = rx;
-        this.ctl.pitch = -ry;
+        // Mode 2: right stick AWAY from you commands nose-down / forward
+        // flight. ctl.pitch = +1 therefore means "forward", and acro negates
+        // it into a nose-down rotation.
+        this.ctl.pitch = (this.invertPitch ? ry : -ry);
         var stick = (-ly + 1) / 2;
+        // Camera mode reads the throttle gimbal as a climb command about its
+        // spring centre, which is how a camera drone's throttle stick works.
+        this.ctl.climb = clamp((stick - 0.5) * 2.4, -1, 1);
+        if (Math.abs(this.ctl.climb) < 0.08) this.ctl.climb = 0;
         if (this.throttleMode === 'absolute') {
           this._thr = this.ctl.throttle = clamp(stick, 0, 1);
         } else {
@@ -1074,6 +1237,10 @@ var Input = {
 
     // Keys are on/off; ease them or every input is a full-rate step.
     var sm = this.profile.smooth;
+    // On the keyboard a climb command is just the throttle keys, held.
+    var climbKey = (held(k, 'ShiftLeft', 'ShiftRight') ? 1 : 0) - (held(k, 'ControlLeft', 'ControlRight') ? 1 : 0);
+    this.ctl.climb = approach(this.ctl.climb, climbKey, dt, 0.12);
+    if (this.invertPitch) pitch = -pitch;
     this.ctl.pitch = approach(this.ctl.pitch, pitch, dt, sm);
     this.ctl.roll  = approach(this.ctl.roll, roll, dt, sm);
     this.ctl.yaw   = approach(this.ctl.yaw, yaw, dt, sm * 1.35);
@@ -1098,11 +1265,14 @@ var Input = {
         ? [['D-pad', 'Move'], ['✕', 'Select'], ['Options', 'Resume']]
         : [['↑ ↓', 'Move'], ['Enter', 'Select'], ['Esc', 'Resume']];
     }
+    var hold = this.mode && this.mode.hold;
     return padMode
-      ? [['L stick', 'Throttle / yaw'], ['R stick', 'Pitch / roll'], ['✕', 'Arm'], ['○', 'Reset'],
-         ['□', 'Prop view'], ['△', 'Camera'], ['Share ×2', 'Restart'], ['Options', 'Pause']]
-      : [['W S', 'Pitch'], ['A D', 'Roll'], ['Q E', 'Yaw'], ['Shift Ctrl', 'Throttle'],
-         ['Space', 'Arm'], ['R', 'Reset'], ['C', 'Camera'], ['V', 'Prop view'], ['Esc', 'Pause']];
+      ? [['L stick', hold ? 'Up-down / yaw' : 'Throttle / yaw'], ['R stick', hold ? 'Move' : 'Pitch / roll'],
+         ['✕', 'Arm'], ['○', 'Reset'], ['L1', 'Flight mode'], ['R1', 'Rates'],
+         ['R2', 'Turtle'], ['△', 'Camera'], ['Share ×2', 'Restart'], ['Options', 'Pause']]
+      : [['W S', hold ? 'Forward / back' : 'Pitch'], ['A D', hold ? 'Left / right' : 'Roll'], ['Q E', 'Yaw'],
+         ['Shift Ctrl', hold ? 'Up / down' : 'Throttle'], ['Space', 'Arm'], ['R', 'Reset'],
+         ['F', 'Flight mode'], ['N', 'Rates'], ['C', 'Camera'], ['Esc', 'Pause']];
   }
 };
 
@@ -1127,7 +1297,7 @@ function start() {
   Store.load();
 
   var renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('scene'), antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX.dpr));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1391,7 +1561,7 @@ function start() {
   scene.add(hemi);
   var sun = new THREE.DirectionalLight(0xfff2dc, 1.1);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1536, 1536);
+  sun.shadow.mapSize.set(GFX.shadowMap, GFX.shadowMap);
   var sc = sun.shadow.camera;
   sc.near = 5; sc.far = 260; sc.left = -90; sc.right = 90; sc.top = 90; sc.bottom = -90;
   sun.shadow.bias = -0.0007;
@@ -1433,7 +1603,7 @@ function start() {
       fog: 0xc3b696, fogNear: 90, fogFar: 620, ceiling: 0 };
 
     setSky(0x2f6ea8, 0xbcd0d6, 0xe8bd84, new THREE.Vector3(-0.55, 0.16, -0.8), 0xffcf8f, 1.0);
-    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar);
+    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar * GFX.fogScale);
     hemi.color.setHex(0xc9dcf0); hemi.groundColor.setHex(0x5b5133); hemi.intensity = 0.75;
     sun.color.setHex(0xffd9a8); sun.intensity = 1.25;
     sun.position.set(-70, 26, -100);
@@ -1458,8 +1628,8 @@ function start() {
 
     // Treeline: keeps the horizon honest and gives you distance cues.
     var trees = [];
-    for (var i = 0; i < 120; i++) {
-      var a = (i / 120) * Math.PI * 2 + Math.random() * 0.5;
+    for (var i = 0; i < GFX.trees; i++) {
+      var a = (i / GFX.trees) * Math.PI * 2 + Math.random() * 0.5;
       var d = 95 + Math.random() * 150;
       trees.push([Math.cos(a) * d, Math.sin(a) * d, 0.9 + Math.random() * 1.3]);
     }
@@ -1481,7 +1651,7 @@ function start() {
       fog: 0x05070d, fogNear: 30, fogFar: 260, ceiling: 0, night: true };
 
     setSky(0x05070f, 0x0a1020, 0x0d1219, new THREE.Vector3(0.5, 0.4, 0.7), 0x9fb6d8, 0.15);
-    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar);
+    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar * GFX.fogScale);
     hemi.color.setHex(0x2a3a55); hemi.groundColor.setHex(0x07090c); hemi.intensity = 0.28;
     sun.color.setHex(0x9db4d8); sun.intensity = 0.22;
     sun.position.set(60, 80, 70);
@@ -1498,7 +1668,7 @@ function start() {
     // Stars
     var starGeo = geo(new THREE.BufferGeometry());
     var pts = [];
-    for (var s = 0; s < 1400; s++) {
+    for (var s = 0; s < GFX.stars; s++) {
       var u = Math.random() * Math.PI * 2, v = Math.random() * 0.85 + 0.05;
       var r = 900;
       pts.push(Math.cos(u) * Math.sin(v * Math.PI / 2) * r, Math.cos(v * Math.PI / 2) * r * 0.9 + 40, Math.sin(u) * Math.sin(v * Math.PI / 2) * r);
@@ -1530,6 +1700,7 @@ function start() {
     });
 
     // Light poles mark the field edge without lighting the ground much.
+    var lampCount = 0;
     for (var p = 0; p < 10; p++) {
       var pa = (p / 10) * Math.PI * 2, pd = 58;
       var px = Math.cos(pa) * pd, pz = Math.sin(pa) * pd;
@@ -1539,7 +1710,8 @@ function start() {
       var head = new THREE.Mesh(geo(new THREE.SphereGeometry(0.34, 10, 8)), basic({ color: 0xffd9a0 }));
       head.position.set(px, 7.1, pz);
       world.add(head);
-      if (p % 5 === 0) {
+      if (p % 5 === 0 && lampCount < GFX.lights) {
+        lampCount++;
         var pl = new THREE.PointLight(0xffd9a0, 1.1, 40, 2);
         pl.position.set(px, 7.1, pz);
         world.add(pl);
@@ -1557,7 +1729,7 @@ function start() {
       bounds: { x: W / 2 - 0.6, z: D / 2 - 0.6 } };
 
     setSky(0x0e1013, 0x0e1013, 0x0e1013, new THREE.Vector3(0, 1, 0), 0x000000, 0);
-    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar);
+    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar * GFX.fogScale);
     hemi.color.setHex(0x9aa6b4); hemi.groundColor.setHex(0x2b2b2b); hemi.intensity = 0.55;
     sun.color.setHex(0xffffff); sun.intensity = 0.35;
     sun.position.set(0, 40, 10);
@@ -1594,7 +1766,7 @@ function start() {
 
     // Roof trusses + light panels: the ceiling is half the character indoors.
     var trussMat = mat({ color: 0x30343a, roughness: 0.8, metalness: 0.3 });
-    var bay = 0;
+    var bay = 0, bayLights = 0;
     for (var t = -D / 2 + 5; t < D / 2; t += 7) {
       var beam = new THREE.Mesh(geo(new THREE.BoxGeometry(W, 0.35, 0.35)), trussMat);
       beam.position.set(0, H - 0.7, t);
@@ -1603,7 +1775,8 @@ function start() {
       panel.rotation.x = Math.PI / 2;
       panel.position.set(0, H - 1.05, t);
       world.add(panel);
-      if (bay % 3 === 1) {
+      if (bay % 3 === 1 && bayLights < GFX.lights) {
+        bayLights++;
         var pl2 = new THREE.PointLight(0xfff1d8, 1.5, 46, 2);
         pl2.position.set(0, H - 2, t);
         world.add(pl2);
@@ -1752,6 +1925,7 @@ function start() {
     armed: false, motor: 0, motors: [0, 0, 0, 0],
     mah: 0, amps: 0, volts: CFG.battery.full * CFG.battery.cells,
     thrustN: 0, airspeed: 0, propwash: 0,
+    holdAlt: null, climbI: 0.16, thrCmd: 0, turtling: 0,
     crashes: 0, flightTime: 0, alive: true
   };
 
@@ -1851,10 +2025,41 @@ function start() {
   function stepPhysics(dt) {
     var c = Input.ctl, p = Input.profile, i, m;
 
-    /* ---- 1. sticks -> commanded body rates, Betaflight's own formula ---- */
-    var tp =  bfRate(c.pitch, p.rc.pitch, p.sup.pitch, p.expo.pitch) * DEG;
+    /* ---- 1. sticks -> commanded body rates ------------------------------
+     * ACRO takes Betaflight's own rate formula straight to the rate loop.
+     * The self-levelling modes put an outer angle loop in front of it, which
+     * is exactly how ANGLE mode works in the firmware: attitude error times
+     * a level gain becomes the rate the inner loop is asked for. Yaw is
+     * always a rate command — even a camera drone yaws at a rate. */
+    var mode = Input.mode;
+    // Stick away from you = nose down = forward, so acro negates ctl.pitch.
+    var tp = -bfRate(c.pitch, p.rc.pitch, p.sup.pitch, p.expo.pitch) * DEG;
     var ty = -bfRate(c.yaw,   p.rc.yaw,   p.sup.yaw,   p.expo.yaw)   * DEG;
     var tr = -bfRate(c.roll,  p.rc.roll,  p.sup.roll,  p.expo.roll)  * DEG;
+
+    if (mode.selfLevel) {
+      _fwd.set(0, 0, -1).applyQuaternion(st.quat);
+      _up.set(0, 1, 0).applyQuaternion(st.quat);
+      _right.set(1, 0, 0).applyQuaternion(st.quat);
+      var pitchAng = Math.asin(clamp(_fwd.y, -1, 1));       // + = nose up
+      var rollAng = Math.atan2(-_right.y, _up.y);           // + = rolled right
+      var tilt = mode.maxTilt * Math.PI / 180;
+      var tgtPitch = -c.pitch * tilt;                        // forward stick = nose down
+      var tgtRoll = c.roll * tilt;
+
+      if (mode.hold) {
+        // Camera drones brake to a stop when you let go: lean against the
+        // horizontal drift you did not ask for, in the body's own heading.
+        var head = yawOf(st.quat);
+        var vFwd = -(st.vel.x * Math.sin(head) + st.vel.z * Math.cos(head));
+        var vRight = st.vel.x * Math.cos(head) - st.vel.z * Math.sin(head);
+        if (Math.abs(c.pitch) < 0.06) tgtPitch = clamp(vFwd * STAB.brakeP, -STAB.brakeMax, STAB.brakeMax);
+        if (Math.abs(c.roll) < 0.06) tgtRoll = clamp(-vRight * STAB.brakeP, -STAB.brakeMax, STAB.brakeMax);
+      }
+
+      tp = clamp((tgtPitch - pitchAng) * mode.levelP, -STAB.levelMaxRate, STAB.levelMaxRate);
+      tr = -clamp((tgtRoll - rollAng) * mode.levelP, -STAB.levelMaxRate, STAB.levelMaxRate);
+    }
 
     /* ---- 2. air data. Everything aerodynamic uses AIRspeed, not ground
      *         speed, so wind is felt as a force through drag rather than
@@ -1880,6 +2085,30 @@ function start() {
      *         units — this is what actively BRAKES a rotation, and it is
      *         the same term whether you are chasing a rate or killing one. */
     var thr = st.armed ? clamp(c.throttle, 0, 1) : 0;
+
+    /* Camera mode flies the throttle stick as a CLIMB RATE about its centre
+     * and holds the altitude it is left at. This is a climb-rate controller
+     * whose integrator finds the hover throttle by itself, so a sagging pack
+     * or a hard lean does not make it sink. */
+    if (mode.hold && st.armed) {
+      var climbCmd = c.climb * STAB.maxClimb;
+      if (c.climb === 0) {
+        if (st.holdAlt === null) st.holdAlt = st.pos.y;
+        climbCmd = clamp((st.holdAlt - st.pos.y) * STAB.altP, -STAB.maxClimb, STAB.maxClimb);
+      } else {
+        st.holdAlt = null;
+      }
+      var vErr = climbCmd - st.vel.y;
+      st.climbI = clamp(st.climbI + vErr * STAB.climbI * dt, 0, STAB.climbILimit);
+      _up.set(0, 1, 0).applyQuaternion(st.quat);
+      var lean = 1 / Math.max(_up.y, 0.4);   // leaning costs vertical thrust
+      thr = clamp((QUAD.motorIdle + st.climbI + vErr * STAB.climbP) * lean, 0, 1);
+      st.thrCmd = thr;
+    } else {
+      st.climbI = 0.16;
+      st.holdAlt = null;
+      st.thrCmd = thr;
+    }
     var airmode = Input.idleMode === 'airmode';
     // Betaflight resets the I-term at the bottom of the throttle unless air
     // mode is on, so a wound-up I cannot slam the quad when you throttle up.
@@ -2005,6 +2234,17 @@ function start() {
     tqX -= dampC * st.omega.x;
     tqY -= dampC * 1.6 * st.omega.y;     // yaw damps hardest: biggest lever on the discs
     tqZ -= dampC * st.omega.z;
+
+    // TURTLE MODE (AUX): props reverse so an upside-down quad can flip itself
+    // back onto its feet without a walk of shame.
+    if (Input.turtleHeld && st.armed && st.pos.y < CFG.groundY + 0.06) {
+      _right.set(1, 0, 0).applyQuaternion(st.quat);
+      _up.set(0, 1, 0).applyQuaternion(st.quat);
+      if (_up.y < 0.5) {
+        tqZ -= 0.075 * (_right.y > 0 ? 1 : -1);
+        st.turtling = 1;
+      } else { st.turtling = 0; }
+    } else { st.turtling = 0; }
 
     if (vrs > 0.01) {
       pwPhase += dt * 47;
@@ -2519,10 +2759,12 @@ function start() {
       vg.addColorStop(1, 'rgba(0,0,0,0.42)');
       hx.fillStyle = vg;
       hx.fillRect(0, 0, w, h);
-      hx.globalAlpha = 0.035;
-      hx.fillStyle = '#000';
-      for (var sl = 0; sl < h; sl += 3) hx.fillRect(0, sl, w, 1);
-      hx.globalAlpha = 1;
+      if (GFX.scanlines) {
+        hx.globalAlpha = 0.035;
+        hx.fillStyle = '#000';
+        for (var sl = 0; sl < h; sl += 3) hx.fillRect(0, sl, w, 1);
+        hx.globalAlpha = 1;
+      }
     }
 
     /* --- attitude: full ladder in FPV, an instrument otherwise --- */
@@ -2634,7 +2876,8 @@ function start() {
     hx.fillRect(bx + 1, by + 1, (bw - 2) * pct, bh - 2);
     T(Math.round(st.mah) + ' MAH  ' + st.amps.toFixed(0) + 'A', w - m, m + 38,
       { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
-    T((Input.active === 'gamepad' ? 'PAD' : 'KBD') + ' · ' + Input.profile.name.toUpperCase() + ' · ' +
+    T((Input.active === 'gamepad' ? 'PAD' : 'KBD') + ' · ' + Input.mode.name.toUpperCase() + ' · ' +
+      Input.profile.name.toUpperCase() + ' · ' +
       (Input.idleMode === 'airmode' ? 'AIR' : Input.idleMode === 'idle' ? 'IDLE' : 'MSTOP') + ' · ' +
       (camMode === 'fpv' ? 'FPV' : camMode === 'chase' ? 'CHASE' : 'LOS'),
       w - m, m + 54, { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
@@ -2644,11 +2887,17 @@ function start() {
     var tbX = m, tbY = h - m - tbH - 20;
     hx.strokeStyle = 'rgba(238,242,238,0.45)'; hx.lineWidth = 1;
     hx.strokeRect(tbX, tbY, tbW, tbH);
-    var thr = Input.ctl.throttle;
+    // Camera mode flies a climb command, so the bar shows what the altitude
+    // controller is actually asking the motors for.
+    var thr = Input.mode.hold ? st.thrCmd : Input.ctl.throttle;
     hx.fillStyle = st.armed ? 'rgba(238,242,238,0.9)' : 'rgba(238,242,238,0.35)';
     hx.fillRect(tbX + 1, tbY + tbH - tbH * thr, tbW - 2, tbH * thr);
     line(tbX - 3, tbY + tbH - tbH * st.motor, tbX + tbW + 3, tbY + tbH - tbH * st.motor, '#ffb020', 1.5);
-    T('THR', tbX, tbY - 8, { size: 10, color: 'rgba(238,242,238,0.55)' });
+    T(Input.mode.hold ? 'PWR' : 'THR', tbX, tbY - 8, { size: 10, color: 'rgba(238,242,238,0.55)' });
+    if (Input.mode.hold && st.armed && st.holdAlt !== null) {
+      T('ALT HOLD ' + st.holdAlt.toFixed(1) + 'M', tbX, tbY - 22, { size: 10, weight: 600, color: '#7dffb0' });
+    }
+    if (st.turtling) T('TURTLE', cx, h - m - 24, { size: 12, align: 'center', weight: 600, color: '#ffb020' });
     T(Math.round(thr * 100) + '%', tbX, h - m - 4, { size: 13, weight: 600 });
 
     // Speed / altitude, bottom right
@@ -2744,106 +2993,211 @@ function start() {
   var menuEl = document.getElementById('menu');
   var pauseEl = document.getElementById('pause');
 
-  var SETUP = [
-    { label: 'Rates', value: function () { return Input.profile.name + ' · ' + Input.profile.rate.roll + '°/s'; },
-      cycle: function () {
+  /* Every row on the dial is the same shape: a label, a value, and a way to
+   * step through that value. Session and Location are rows too, which is why
+   * the board collapsed into one dial. */
+  var DIAL = [
+    { id: 'session', label: 'Session',
+      value: function () { return Menu.scenario().name; },
+      step: function (d) { Menu.stepList(Menu.sessions(), 'idxSession', d); },
+      brief: function () { return '<b>' + Menu.scenario().name + '</b> — ' + Menu.scenario().desc; } },
+    { id: 'location', label: 'Location',
+      value: function () { return Menu.mapSel().name; },
+      step: function (d) { Menu.stepList(MAPS, 'idxMap', d); },
+      brief: function () { return '<b>' + Menu.mapSel().name + '</b> — ' + Menu.mapSel().desc; } },
+    { id: 'mode', label: 'Flight mode',
+      value: function () { return Input.mode.name; },
+      step: function (d) {
+        var i = FLIGHT_MODES.indexOf(Input.mode);
+        Input.mode = FLIGHT_MODES[(i + d + FLIGHT_MODES.length) % FLIGHT_MODES.length];
+        Store.data.flightMode = Input.mode.id; Store.save();
+        Menu.clampSession();
+      },
+      brief: function () { return '<b>' + Input.mode.name + ' mode</b> — ' + Input.mode.desc; } },
+    { id: 'rates', label: 'Rates',
+      value: function () { return Input.profile.name + ' · ' + Input.profile.rate.roll + '°/s'; },
+      step: function (d) {
         var i = RATE_PROFILES.indexOf(Input.profile);
-        Input.profile = RATE_PROFILES[(i + 1) % RATE_PROFILES.length];
+        Input.profile = RATE_PROFILES[(i + d + RATE_PROFILES.length) % RATE_PROFILES.length];
         Store.data.rates = Input.profile.id; Store.save();
+      },
+      brief: function () { return '<b>' + Input.profile.name + ' rates</b> — ' + Input.profile.desc; } },
+    { id: 'gfx', label: 'Graphics',
+      value: function () { return GFX.name; },
+      step: function (d) {
+        var i = GFX_PRESETS.indexOf(GFX);
+        GFX = GFX_PRESETS[(i + d + GFX_PRESETS.length) % GFX_PRESETS.length];
+        Store.data.gfx = GFX.id; Store.save();
+        applyGfx(true);
+        Demo.rebuild();
+      },
+      brief: function () {
+        return '<b>' + GFX.name + '</b> — ' + (GFX.id === 'low'
+          ? 'No shadows, sparse scenery, native resolution. For laptops and integrated graphics.'
+          : GFX.id === 'medium'
+            ? 'Shadows on, scenery thinned, resolution capped at 1.5×.'
+            : 'Everything on: shadows, full treeline, every light, 2× resolution.');
       } },
-    { label: 'Idle authority', value: function () { return idleModeName(); },
-      cycle: function () { cycleIdleMode(); } },
-    { label: 'Prop in view', value: function () { return showArms ? 'On' : 'Off'; },
-      cycle: function () { showArms = !showArms; Store.data.arms = showArms; Store.save(); } },
-    { label: 'Throttle', value: function () { return Input.throttleMode === 'absolute' ? 'Stick position' : 'Ramped'; },
-      cycle: function () { Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute'; } },
-    { label: 'Sound', value: function () { return Store.data.sound ? 'On' : 'Off'; },
-      cycle: function () { Store.data.sound = !Store.data.sound; Store.save(); Sound.setVolume(); } },
-    { label: 'Volume', value: function () { return Math.round(Store.data.volume * 100) + '%'; },
-      cycle: function () {
-        Store.data.volume = Math.round((Store.data.volume + 0.2) * 10) / 10;
-        if (Store.data.volume > 1.001) Store.data.volume = 0;
+    { id: 'idle', label: 'Idle authority',
+      value: function () { return idleModeName(); },
+      step: function (d) { cycleIdleMode(d); },
+      brief: function () {
+        return Input.idleMode === 'airmode'
+          ? '<b>Air mode</b> — full control authority at zero throttle. What a modern freestyle quad flies.'
+          : Input.idleMode === 'idle'
+            ? '<b>Idle floor</b> — Betaflight defaults. At the bottom of the stick only half of each correction survives.'
+            : '<b>Motor stop</b> — the props actually stop below min_check, so there is no authority at all until you spool up.';
+      } },
+    { id: 'prop', label: 'Prop in view',
+      value: function () { return showArms ? 'On' : 'Off'; },
+      step: function () { showArms = !showArms; Store.data.arms = showArms; Store.save(); },
+      brief: function () { return 'Whether the front arms and prop tips clip the corners of the FPV frame, as they do on a real quad.'; } },
+    { id: 'pitchdir', label: 'Pitch stick',
+      value: function () { return Input.invertPitch ? 'Inverted' : 'Normal'; },
+      step: function () { Input.invertPitch = !Input.invertPitch; Store.data.invertPitch = Input.invertPitch; Store.save(); },
+      brief: function () { return Input.invertPitch
+        ? '<b>Inverted</b> — stick away pitches the nose up.'
+        : '<b>Normal</b> — stick away pitches the nose down and flies you forward, as on a real Mode 2 transmitter.'; } },
+    { id: 'throttle', label: 'Throttle',
+      value: function () { return Input.throttleMode === 'absolute' ? 'Stick position' : 'Ramped'; },
+      step: function () { Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute'; },
+      brief: function () { return Input.throttleMode === 'absolute'
+        ? 'The gimbal position IS the throttle, like a real transmitter.'
+        : 'Stick deflection ramps the throttle up or down and it stays where you leave it.'; } },
+    { id: 'sound', label: 'Sound',
+      value: function () { return Store.data.sound ? Math.round(Store.data.volume * 100) + '%' : 'Off'; },
+      step: function (d) {
+        if (!Store.data.sound) { Store.data.sound = true; Store.data.volume = 0.2; }
+        else {
+          Store.data.volume = Math.round((Store.data.volume + d * 0.2) * 10) / 10;
+          if (Store.data.volume > 1.001) { Store.data.volume = 0; Store.data.sound = false; }
+          else if (Store.data.volume < 0.001) { Store.data.sound = false; Store.data.volume = 0; }
+        }
         Store.save(); Sound.setVolume();
-      } }
+      },
+      brief: function () { return 'Motors, airflow, gates and warnings, all synthesised at runtime.'; } },
+    { id: 'launch', label: '', launch: true,
+      value: function () { return 'Launch ▸'; },
+      step: function () {},
+      brief: function () { return 'Start the session.'; } }
   ];
 
   var Menu = {
-    col: 0,
-    idx: [0, 0, 0],
-    els: [[], [], []],
+    focus: 0,
+    idxSession: 0,
+    idxMap: 0,
+    els: [],
+
+    sessions: function () {
+      return SCENARIOS.filter(function (sc) { return sc.id !== 'recover' || !Input.mode.selfLevel; });
+    },
+    scenario: function () { var l = this.sessions(); return l[Math.min(this.idxSession, l.length - 1)]; },
+    mapSel: function () { return MAPS[this.idxMap]; },
+    clampSession: function () {
+      var l = this.sessions();
+      if (this.idxSession >= l.length) this.idxSession = l.length - 1;
+    },
+    stepList: function (list, key, d) {
+      var n = list.length;
+      this[key] = (this[key] + d + n) % n;
+    },
 
     build: function () {
       var self = this;
-      var cols = [
-        { el: document.getElementById('col-mode'), items: SCENARIOS },
-        { el: document.getElementById('col-map'), items: MAPS }
-      ];
-      cols.forEach(function (c, ci) {
-        c.items.forEach(function (item, ii) {
-          var b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'opt';
-          b.innerHTML = '<span class="code">' + item.code + '</span>' +
-                        '<span class="name">' + item.name + '</span>' +
-                        '<span class="sub">' + item.desc + '</span>';
-          b.addEventListener('click', function () { self.col = ci; self.idx[ci] = ii; Sound.move(); self.render(); });
-          b.addEventListener('dblclick', function () { self.launch(); });
-          c.el.appendChild(b);
-          self.els[ci].push(b);
-        });
-      });
-      var setupCol = document.getElementById('col-setup');
-      SETUP.forEach(function (row, ri) {
+      var dial = document.getElementById('dial');
+      DIAL.forEach(function (row, i) {
         var b = document.createElement('button');
         b.type = 'button';
-        b.className = 'setrow';
-        b.innerHTML = '<span class="l">' + row.label + '</span><span class="v"></span>';
+        b.className = 'spoke' + (row.launch ? ' launch' : '');
+        b.innerHTML = '<span class="lbl">' + row.label + '</span><span class="val"></span>';
         b.addEventListener('click', function () {
-          self.col = 2; self.idx[2] = ri;
-          row.cycle(); Sound.select(); self.render();
+          if (self.focus === i) { if (row.launch) self.launch(); else { row.step(1); Sound.select(); } }
+          else { self.focus = i; Sound.move(); }
+          self.render();
         });
-        setupCol.appendChild(b);
-        self.els[2].push(b);
+        dial.appendChild(b);
+        self.els.push(b);
       });
-
-      document.getElementById('startbtn').addEventListener('click', function () { self.launch(); });
 
       // Restore the last session's choices.
-      var si = SCENARIOS.findIndex ? SCENARIOS.findIndex(function (s) { return s.id === Store.data.scenario; }) : -1;
-      var mi = MAPS.findIndex ? MAPS.findIndex(function (s) { return s.id === Store.data.map; }) : -1;
-      this.idx[0] = si >= 0 ? si : 1;
-      this.idx[1] = mi >= 0 ? mi : 0;
-      var rp = RATE_PROFILES.filter(function (p) { return p.id === Store.data.rates; })[0];
+      var rp = RATE_PROFILES.filter(function (x) { return x.id === Store.data.rates; })[0];
       if (rp) Input.profile = rp;
+      Input.mode = flightModeById(Store.data.flightMode);
+      Input.invertPitch = !!Store.data.invertPitch;
       if (IDLE_MODES.indexOf(Store.data.idleMode) >= 0) Input.idleMode = Store.data.idleMode;
+      GFX = gfxById(Store.data.gfx);
+      var mi = MAPS.map(function (m) { return m.id; }).indexOf(Store.data.map);
+      if (mi >= 0) this.idxMap = mi;
+      var si = this.sessions().map(function (x) { return x.id; }).indexOf(Store.data.scenario);
+      if (si >= 0) this.idxSession = si;
+      applyGfx(false);
     },
 
-    scenario: function () { return SCENARIOS[this.idx[0]]; },
-    mapSel: function () { return MAPS[this.idx[1]]; },
+    /* The dial: rows are spaced evenly down the screen and pushed right by
+     * the half-ellipse they sit on, so the arc reads as a semicircle without
+     * the crowding a constant-angle layout gets at its ends. */
+    layout: function () {
+      var dial = document.getElementById('dial');
+      var h = dial.clientHeight || 420;
+      var w = dial.clientWidth || 420;
+      var n = DIAL.length;
+      var rowH = Math.max(26, Math.min(40, (h - 30) / n));
+      var Ry = (n / 2) * rowH + rowH * 0.6;
+      var Rx = Math.min(w * 0.22, 104);
+      var cx = 18;
+      var cy = h / 2;
+      var self = this;
+
+      DIAL.forEach(function (row, i) {
+        // The list is fixed and centred; moving the focus highlights a row
+        // rather than rotating the dial, so it can never run off the panel.
+        var dy = (i - (n - 1) / 2) * rowH;
+        var el = self.els[i];
+        var k = clamp(dy / Ry, -1, 1);
+        var x = cx + Rx * Math.sqrt(Math.max(0, 1 - k * k));
+        var y = cy + dy;
+        var off = Math.abs(k);
+        el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + (y - rowH / 2).toFixed(1) + 'px)';
+        el.style.opacity = (i === self.focus ? 1 : 0.72 - off * 0.18).toFixed(3);
+        el.style.pointerEvents = 'auto';
+        el.setAttribute('data-focus', i === self.focus ? '1' : '0');
+      });
+
+      // The guide arc the rows are threaded on, plus a lit segment at the focus.
+      var p1 = [], p2 = [];
+      for (var t = -1; t <= 1.0001; t += 0.04) {
+        p1.push((cx + Rx * Math.sqrt(Math.max(0, 1 - t * t))).toFixed(1) + ',' + (cy + t * Ry).toFixed(1));
+      }
+      var fk = ((this.focus - (n - 1) / 2) * rowH) / Ry;
+      for (var u = fk - 0.075; u <= fk + 0.075; u += 0.015) {
+        var uu = clamp(u, -1, 1);
+        p2.push((cx + Rx * Math.sqrt(Math.max(0, 1 - uu * uu))).toFixed(1) + ',' + (cy + uu * Ry).toFixed(1));
+      }
+      var svg = dial.querySelector('.dial-arc');
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      document.getElementById('arcpath').setAttribute('d', 'M' + p1.join(' L'));
+      document.getElementById('arcpath2').setAttribute('d', 'M' + p2.join(' L'));
+    },
 
     render: function () {
+      this.clampSession();
       var self = this;
-      [0, 1, 2].forEach(function (ci) {
-        self.els[ci].forEach(function (el, ii) {
-          el.setAttribute('aria-selected', ii === self.idx[ci] ? 'true' : 'false');
-        });
+      DIAL.forEach(function (row, i) {
+        self.els[i].querySelector('.val').textContent = row.value();
       });
-      ['col-mode', 'col-map', 'col-setup'].forEach(function (id, ci) {
-        document.getElementById(id).classList.toggle('focused', ci === self.col);
-      });
-      SETUP.forEach(function (row, ri) { self.els[2][ri].querySelector('.v').textContent = row.value(); });
+      this.layout();
+
+      document.getElementById('briefdesc').innerHTML = DIAL[this.focus].brief();
+      document.getElementById('m-meta').innerHTML =
+        Input.mode.name.toUpperCase() + ' MODE &middot; <b>' + Input.profile.name.toUpperCase() + '</b> RATES &middot; 4S 1300' +
+        (Input.mode.selfLevel ? ' &middot; SELF-LEVELLING' : ' &middot; NO SELF-LEVEL');
 
       var sc = this.scenario(), mp = this.mapSel();
-      document.getElementById('briefdesc').innerHTML =
-        '<b>' + sc.name + '</b> — ' + sc.desc + '<br><b>' + mp.name + '</b> — ' + mp.desc;
-      document.getElementById('m-rates').textContent = Input.profile.name.toUpperCase();
-
       var rec = Store.record(mp.id, sc.id);
-      var label = sc.id === 'rush' ? 'MOST GATES' : sc.id === 'recover' ? 'BEST ROUNDS' : sc.id === 'free' ? '' : 'BEST LAP';
+      var label = sc.id === 'rush' ? 'Most gates' : sc.id === 'recover' ? 'Best rounds' : sc.id === 'free' ? '' : 'Best lap';
       var box = document.getElementById('briefrecord');
-      if (!label) box.innerHTML = '';
-      else box.innerHTML = label + '<span class="t">' +
-        (rec === undefined ? '—' : (sc.id === 'rush' || sc.id === 'recover' ? rec : fmtTime(rec))) + '</span>';
+      box.innerHTML = !label ? '' : label + '<span class="t"' + (rec === undefined ? ' style="color:var(--ink-faint)"' : '') + '>' +
+        (rec === undefined ? 'not set' : (sc.id === 'rush' || sc.id === 'recover' ? rec : fmtTime(rec))) + '</span>';
 
       document.getElementById('menubinds').innerHTML = Input.bindings('menu').map(function (b) {
         return '<span><b>' + b[0] + '</b>' + b[1] + '</span>';
@@ -2851,31 +3205,29 @@ function start() {
       var dev = document.getElementById('devbadge');
       dev.classList.toggle('pad', Input.active === 'gamepad');
       dev.querySelector('b').textContent = Input.active === 'gamepad'
-        ? (Input.padName ? Input.padName.replace(/\s*\(.*\)\s*/, '').slice(0, 26) || 'Gamepad' : 'Gamepad')
+        ? (Input.padName ? Input.padName.replace(/\s*\(.*\)\s*/, '').slice(0, 24) || 'Gamepad' : 'Gamepad')
         : 'Keyboard';
-      document.getElementById('gokey').textContent = Input.active === 'gamepad' ? '✕' : 'Enter';
     },
 
     move: function (dx, dy) {
-      if (dx) {
-        this.col = clamp(this.col + dx, 0, 2);
-      } else if (dy) {
-        var n = this.els[this.col].length;
-        this.idx[this.col] = (this.idx[this.col] + dy + n) % n;
+      if (dy) {
+        this.focus = clamp(this.focus + dy, 0, DIAL.length - 1);
+        Sound.move();
+      } else if (dx) {
+        DIAL[this.focus].step(dx);
+        Sound.select();
       }
-      Sound.move();
       this.render();
     },
 
-    activate: function () {
-      if (this.col === 2) { SETUP[this.idx[2]].cycle(); Sound.select(); this.render(); }
-      else this.launch();
-    },
+    activate: function () { this.launch(); },
 
     launch: function () {
       Sound.unlock();
       Sound.select();
+      Demo.stop();
       menuEl.hidden = true;
+      camera.clearViewOffset();
       Run.begin(this.scenario(), this.mapSel());
       renderHint();
     },
@@ -2886,6 +3238,7 @@ function start() {
       Run.state = 'menu';
       Sound.stopFlight();
       this.render();
+      Demo.start();
     }
   };
 
@@ -2893,6 +3246,20 @@ function start() {
   var PAUSE_ROWS = [
     { label: 'Resume', value: null, act: function () { Pause.close(); } },
     { label: 'Restart run', value: null, act: function () { Pause.close(); Run.restart(); } },
+    { label: 'Flight mode', value: function () { return Input.mode.name; }, act: function () {
+        var i = FLIGHT_MODES.indexOf(Input.mode);
+        Input.mode = FLIGHT_MODES[(i + 1) % FLIGHT_MODES.length];
+        Store.data.flightMode = Input.mode.id; Store.save();
+        st.holdAlt = null; st.climbI = 0.16;
+        renderHint(); Pause.render();
+      } },
+    { label: 'Graphics', value: function () { return GFX.name; }, act: function () {
+        var i = GFX_PRESETS.indexOf(GFX);
+        GFX = GFX_PRESETS[(i + 1) % GFX_PRESETS.length];
+        Store.data.gfx = GFX.id; Store.save();
+        applyGfx(true);
+        Pause.render();
+      } },
     { label: 'Rates', value: function () { return Input.profile.name; }, act: function () {
         var i = RATE_PROFILES.indexOf(Input.profile);
         Input.profile = RATE_PROFILES[(i + 1) % RATE_PROFILES.length];
@@ -2983,7 +3350,11 @@ function start() {
     arm: function () {
       if (Run.state === 'countdown') return;
       if (!st.armed) {
-        if (Input.ctl.throttle > 0.12) { toast('LOWER THROTTLE TO ARM', '#ffb020'); Sound.warn(); return; }
+        // In camera mode the throttle gimbal is a climb command about its
+        // centre, so "stick down" is the wrong check — centred is.
+        var stickHot = Input.mode.hold ? Math.abs(Input.ctl.climb) > 0.15 : Input.ctl.throttle > 0.12;
+        if (stickHot) { toast(Input.mode.hold ? 'CENTRE THE THROTTLE TO ARM' : 'LOWER THROTTLE TO ARM', '#ffb020'); Sound.warn(); return; }
+        if (Input.mode.hold) { st.holdAlt = null; st.climbI = 0.16; }
         st.armed = true; Sound.arm(); toast('ARMED', '#ff4d4d');
       } else {
         st.armed = false; Sound.disarm(); toast('DISARMED', '#f2ece2');
@@ -2999,6 +3370,26 @@ function start() {
       showArms = !showArms;
       Store.data.arms = showArms; Store.save();
       toast('PROP VIEW ' + (showArms ? 'ON' : 'OFF'), '#f2ece2');
+    },
+    flightMode: function () {
+      var i = FLIGHT_MODES.indexOf(Input.mode);
+      Input.mode = FLIGHT_MODES[(i + 1) % FLIGHT_MODES.length];
+      Store.data.flightMode = Input.mode.id; Store.save();
+      st.holdAlt = null;
+      toast(Input.mode.name.toUpperCase() + ' MODE', '#ffb020');
+      Sound.select();
+    },
+    rates: function () {
+      var i = RATE_PROFILES.indexOf(Input.profile);
+      Input.profile = RATE_PROFILES[(i + 1) % RATE_PROFILES.length];
+      Store.data.rates = Input.profile.id; Store.save();
+      toast(Input.profile.name.toUpperCase() + ' RATES', '#ffb020');
+      Sound.select();
+    },
+    beeper: function () {
+      // Lost-model beeper. Every pilot has needed this in long grass.
+      for (var i = 0; i < 6; i++) Sound.blip(3000, 0.09, 'square', 0.16, i * 0.16);
+      toast('BEEPER', '#f2ece2');
     },
     throttleMode: function () {
       Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute';
@@ -3033,6 +3424,21 @@ function start() {
   });
 
   /* ================= RESIZE ================= */
+  function applyGfx(rebuild) {
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX.dpr));
+    renderer.shadowMap.enabled = GFX.shadows;
+    sun.castShadow = GFX.shadows;
+    sun.shadow.mapSize.set(GFX.shadowMap, GFX.shadowMap);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    resize();
+    if (rebuild && mapSpec) {
+      var id = mapSpec.id;
+      clearWorld();
+      mapSpec = BUILDERS[id]();
+      mapSpec.id = id;
+    }
+  }
+
   function resize() {
     var w = window.innerWidth, h = window.innerHeight;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -3046,6 +3452,208 @@ function start() {
   window.addEventListener('resize', resize);
   resize();
 
+  /* ================= SHOWCASE (behind the menu) =================
+   * The right of the menu is a live flight, not a video: the same renderer,
+   * the same airframe, flown along a closed spline through a ring course so
+   * the first thing you see is the thing the sim does. It is scripted rather
+   * than physically flown — an autopilot good enough to look composed is a
+   * bigger job than the menu deserves, and a scripted line is repeatable. */
+  var Demo = {
+    active: false, built: false, t: 0, shot: 0, shotT: 0,
+    rings: [], curve: null, u: 0,
+    camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false,
+
+    build: function () {
+      clearWorld();
+      this.rings.length = 0;
+
+      // Dusk: low sun, deep sky. Neon needs something to glow against.
+      setSky(0x0d2748, 0x39506b, 0xe08a4a, new THREE.Vector3(-0.82, 0.05, -0.45), 0xff9d55, 1.0);
+      scene.fog = new THREE.Fog(0x4b4a56, 55, 380 * GFX.fogScale);
+      hemi.color.setHex(0x6f86a8); hemi.groundColor.setHex(0x2a2519); hemi.intensity = 0.5;
+      sun.color.setHex(0xffb070); sun.intensity = 0.85;
+      sun.position.set(-90, 34, -70);
+      sun.target.position.set(0, 6, 0);
+      renderer.toneMappingExposure = 1.05;
+
+      var ground = new THREE.Mesh(geo(new THREE.PlaneGeometry(1400, 1400)),
+        mat({ map: grassTex(), roughness: 1, color: 0x8f9d7a }));
+      disposables.push(ground.material.map);
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = GFX.shadows;
+      world.add(ground);
+
+      // A closed course that climbs, dives and banks, so the line itself
+      // advertises what the sim can do.
+      var pts = [
+        [0, 6, -34], [26, 11, -20], [34, 5, 8], [18, 14, 30],
+        [-10, 7, 34], [-32, 16, 12], [-30, 5, -16], [-12, 10, -34]
+      ].map(function (p) { return new THREE.Vector3(p[0], p[1], p[2]); });
+      this.curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
+
+      // Bake the path into a table. Sampling a spline by arc length every
+      // frame is both slower and fussier about edge cases than reading a
+      // precomputed loop, and the demo never needs to change its line.
+      var N = 600;
+      this.path = [];
+      this.tangents = [];
+      for (var k = 0; k < N; k++) {
+        this.path.push(this.curve.getPointAt(k / N));
+        this.tangents.push(this.curve.getTangentAt(k / N));
+      }
+      this.pathLen = this.curve.getLength();
+
+      var neon = [0x22e0ff, 0xff3ea5, 0x9dff3c, 0xffb020, 0x6a7bff, 0xff5c16, 0x22e0ff, 0x9dff3c];
+      var self = this;
+      pts.forEach(function (pt, i) {
+        var u = i / pts.length;
+        var tan = self.curve.getTangentAt(u);
+        var g = new THREE.Group();
+        g.position.copy(pt);
+        g.lookAt(pt.clone().add(tan));           // ring axis along the course
+        var r = 3.6;
+        var frame = new THREE.Mesh(geo(new THREE.TorusGeometry(r, 0.14, 10, 44)),
+          mat({ color: 0x1a1f27, roughness: 0.6, metalness: 0.3 }));
+        frame.castShadow = GFX.shadows;
+        g.add(frame);
+        var glowMat = basic({ color: neon[i % neon.length], transparent: true, opacity: 0.95, fog: false });
+        var glow = new THREE.Mesh(geo(new THREE.TorusGeometry(r - 0.2, 0.12, 8, 44)), glowMat);
+        g.add(glow);
+        world.add(g);
+        self.rings.push({ group: g, glow: glowMat, base: neon[i % neon.length], u: u, pulse: 0 });
+      });
+
+      // A little scenery for parallax and a sense of scale.
+      var pylons = [];
+      [[14, -30, 7], [-24, -4, 6], [22, 20, 8], [-16, 24, 5]].forEach(function (q) {
+        addPylon(q[0], q[1], q[2], pylons);
+      });
+      if (GFX.trees > 20) {
+        var trees = [];
+        for (var i = 0; i < Math.min(GFX.trees, 80); i++) {
+          var a = (i / Math.min(GFX.trees, 80)) * Math.PI * 2 + Math.random() * 0.5;
+          var d = 80 + Math.random() * 120;
+          trees.push([Math.cos(a) * d, Math.sin(a) * d, 0.9 + Math.random() * 1.2]);
+        }
+        addTreeline(trees);
+      }
+      this.built = true;
+    },
+
+    rebuild: function () { if (this.active) { this.build(); this.camInit = false; } },
+
+    start: function () {
+      if (!this.built) this.build();
+      this.active = true;
+      this.u = 0; this.t = 0; this.shot = 0; this.shotT = 0; this.camInit = false;
+      drone.visible = true;
+      parts.pod.visible = true;
+      parts.lens.visible = true;
+      mapSpec = null;                 // the demo owns the world now
+    },
+
+    stop: function () {
+      this.active = false;
+      this.built = false;
+      clearWorld();
+      this.rings.length = 0;
+    },
+
+    update: function (dt) {
+      this.t += dt;
+      var curve = this.curve;
+
+      // Constant ground speed along the baked path.
+      if (!isFinite(this.u)) this.u = 0;
+      this.u = (this.u + (17 * dt) / this.pathLen) % 1;
+      if (this.u < 0) this.u += 1;
+      var N = this.path.length;
+      var fi = this.u * N;
+      var i0 = ((Math.floor(fi) % N) + N) % N;
+      var i1 = (i0 + 1) % N;
+      var fr = fi - Math.floor(fi);
+      var pos = _v3.copy(this.path[i0]).lerp(this.path[i1], fr);
+      var tan = _v4.copy(this.tangents[i0]).lerp(this.tangents[i1], fr).normalize();
+      var ahead = this.tangents[(i0 + Math.round(N * 0.012)) % N];
+
+      // Bank into the turn, the way the airframe would have to.
+      var turn = ahead.x * tan.z - ahead.z * tan.x;
+      var bank = clamp(-turn * 13, -1.15, 1.15);
+      this.bank = this.bank === undefined ? bank : this.bank + (bank - this.bank) * (1 - Math.exp(-dt / 0.22));
+
+      var up = _v.set(0, 1, 0).applyAxisAngle(tan, this.bank);
+      var m = _m4.lookAt(pos, _v5.copy(pos).add(tan), up);
+      drone.position.copy(pos);
+      drone.quaternion.setFromRotationMatrix(m);
+
+      // Props spin, discs blur, exactly as in flight.
+      propSpin += 5.5 * dt * 9;
+      parts.props.forEach(function (pr, i) {
+        pr.hub.rotation.y = propSpin * pr.dir;
+        pr.blades.opacity = GFX.discs ? 0.35 : 0.9;
+        parts.discs[i].material.opacity = GFX.discs ? 0.2 : 0;
+      });
+
+      // Rings flare as it goes through them.
+      var self = this;
+      this.rings.forEach(function (ring) {
+        var d = Math.abs(((self.u - ring.u + 1.5) % 1) - 0.5);
+        if (d < 0.02) ring.pulse = 1;
+        ring.pulse = Math.max(0, ring.pulse - dt * 1.6);
+        _col.setHex(ring.base).lerp(_colWhite, ring.pulse);
+        ring.glow.color.copy(_col);
+        ring.glow.opacity = 0.72 + ring.pulse * 0.28;
+      });
+
+      /* Three cinematic shots on a rotation. A menu background that never
+       * changes framing stops being interesting after ten seconds. */
+      this.shotT += dt;
+      if (this.shotT > 7) {
+        this.shotT = 0;
+        this.shot = (this.shot + 1) % 3;
+        this.camInit = false;
+        // A fly-by is planted ahead of the flight path, not carried along
+        // with it: the drone comes at the lens and goes past.
+        var side = _v5.copy(tan).cross(_v2.set(0, 1, 0)).normalize();
+        this.anchor = new THREE.Vector3()
+          .copy(drone.position)
+          .addScaledVector(tan, 24)
+          .addScaledVector(side, 7);
+        this.anchor.y = Math.max(1.4, this.anchor.y - 3);
+      }
+      var want = _v2.set(0, 0, 0), look = drone.position;
+      if (this.shot === 0) {
+        // Slow orbit held on the aircraft, so it stays the subject.
+        var a = this.t * 0.34;
+        want.copy(drone.position).add(_v5.set(Math.cos(a) * 11, 4.5, Math.sin(a) * 11));
+      } else if (this.shot === 1) {
+        var back = _v5.set(0, 1.1, 4.2).applyQuaternion(drone.quaternion);
+        want.copy(drone.position).add(back);
+      } else {
+        want.copy(this.anchor || drone.position);
+      }
+      if (!this.camInit) { this.camPos.copy(want); this.camLook.copy(look); this.camInit = true; }
+      this.camPos.lerp(want, 1 - Math.exp(-dt / (this.shot === 1 ? 0.18 : this.shot === 2 ? 1.6 : 0.7)));
+      this.camLook.lerp(look, 1 - Math.exp(-dt / 0.25));
+      camera.fov = this.shot === 1 ? 72 : this.shot === 2 ? 52 : 50;
+      camera.position.copy(this.camPos);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(this.camLook);
+
+      // Compose the action into the clear right-hand side of the screen.
+      var w = window.innerWidth, h = window.innerHeight;
+      if (w > 860) camera.setViewOffset(w, h, -Math.round(w * 0.19), 0, w, h);
+      else camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+
+      sky.position.copy(camera.position);
+      renderer.render(scene, camera);
+    }
+  };
+  var _col = new THREE.Color(), _colWhite = new THREE.Color(0xffffff);
+  var _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(),
+      _v5 = new THREE.Vector3(), _m4 = new THREE.Matrix4();
+
   /* ================= LOOP ================= */
   var last = performance.now();
   var acc = 0;
@@ -3054,7 +3662,9 @@ function start() {
 
   function frame(now) {
     requestAnimationFrame(frame);
-    var dt = Math.min((now - last) / 1000, 0.1);
+    // rAF's timestamp is the start of the frame and can precede the clock
+    // reading taken when the loop was armed, so dt can arrive negative.
+    var dt = clamp((now - last) / 1000, 0, 0.1);
     last = now;
 
     var menuing = inMenu();
@@ -3075,6 +3685,7 @@ function start() {
         if (n.select) Menu.activate();
       }
       hx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      if (Demo.active && pauseEl.hidden) Demo.update(dt);
       return;
     }
 
@@ -3083,6 +3694,9 @@ function start() {
     if (Input.edges.camera) cycleCamera();
     if (Input.edges.arms) Input.hooks.arms();
     if (Input.edges.pause) Pause.open();
+    if (Input.edges.flightMode) Input.hooks.flightMode();
+    if (Input.edges.rates) Input.hooks.rates();
+    if (Input.edges.beeper) Input.hooks.beeper();
 
     if (!mapSpec) return;
 
@@ -3098,7 +3712,7 @@ function start() {
     // Props: blades below ~40% spool, a blur disc above it.
     var rpm = st.armed ? 0.35 + st.motor * 6.2 : 0;
     propSpin += rpm * dt * 9;
-    var discOpacity = clamp((rpm - 1.2) / 3.2, 0, 1) * 0.2;
+    var discOpacity = GFX.discs ? clamp((rpm - 1.2) / 3.2, 0, 1) * 0.2 : 0;
     parts.props.forEach(function (p, i) {
       p.hub.rotation.y = propSpin * p.dir;
       p.blades.opacity = clamp(1 - discOpacity * 2.4, 0.08, 0.95);
@@ -3140,9 +3754,12 @@ function start() {
   Menu.render();
   document.getElementById('boot').hidden = true;
   menuEl.hidden = false;
+  Demo.start();
+  window.addEventListener('resize', function () { if (!menuEl.hidden) Menu.layout(); });
   requestAnimationFrame(frame);
 
-  window.__sim = { st: st, Run: Run, Menu: Menu, Pause: Pause, Input: Input, cfg: CFG,
+  window.__sim = { st: st, Run: Run, Menu: Menu, Pause: Pause, Input: Input, cfg: CFG, Demo: Demo,
+    gfx: function () { return GFX; }, modes: FLIGHT_MODES,
     spec: function () { return mapSpec; }, cam: function () { return camMode; }, Sound: Sound,
     // Exposed so the flight model can be measured rather than taken on trust.
     quad: QUAD, fc: FC, motors: MOTORS, kp: KP, profiles: RATE_PROFILES, bfRate: bfRate,

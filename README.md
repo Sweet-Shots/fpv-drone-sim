@@ -33,6 +33,10 @@ screen.
 | `Esc` | Pause |
 
 ### Gamepad (Mode 2, standard mapping — PS4/PS5/Xbox)
+
+Flying a quad takes exactly four axes — two gimbals. Everything else on a real
+transmitter is an **AUX switch**, and that is what the shoulder buttons are here.
+
 | Control | Action |
 | --- | --- |
 | Left stick | Throttle / yaw |
@@ -41,11 +45,34 @@ screen.
 | ○ / B | Reset drone |
 | □ / X | Prop-in-view |
 | △ / Y | Camera |
+| **L1** | AUX: flight mode |
+| **R1** | AUX: rate profile |
+| **L2** | AUX: lost-model beeper |
+| **R2** | AUX: turtle mode (flip an upside-down quad back over) |
 | **Share / View ×2** | Restart run |
 | **Options / Start** | Pause |
 
+Pushing the right stick **away from you pitches the nose down and flies you
+forward**, as on a real Mode 2 transmitter. If you prefer it the other way, the
+Pitch stick row in the menu inverts it.
+
 Arming is blocked above 12% throttle, the same check a real flight controller
 does, and every run starts at idle.
+
+## Flight modes
+
+Betaflight flies one mode at a time, picked from an AUX switch. All three are here:
+
+| Mode | What it does |
+| --- | --- |
+| **Acro** | Rate mode. Sticks command rotation, nothing levels you, and the quad holds whatever attitude you leave it in. |
+| **Angle** | Self-levelling. Stick deflection is a target lean angle; centre the sticks and it rolls back to level. |
+| **Camera** | Angle mode plus altitude hold and braking, like a DJI-style camera drone. Up/down, left/right, yaw to turn — let go and it parks in the air. |
+
+In Angle and Camera the throttle gimbal is a **climb-rate** command about its
+spring centre, which is how a camera drone's stick actually works, and the
+Recovery Drill disappears from the session list — a quad that levels itself has
+nothing to recover from.
 
 ## Rate profiles
 
@@ -71,6 +98,14 @@ Each profile carries its own expo and stick smoothing.
 | Gate Rush | 45 seconds; every gate taken adds four more |
 | Recovery Drill | Dropped inverted, tumbling and sinking. Air mode will stop the spin, but nothing levels you: read the attitude, roll upright, then power out. Each round starts lower and spins harder |
 | Line of Sight | The camera stays on the ground where you are standing, as at a real field |
+
+## Graphics
+
+Low / Medium / High, switchable from the menu or mid-flight from the pause
+screen. Each step is a real cost lever, not a label: render resolution, whether
+the sun casts shadows at all, how much scenery gets built, how many point lights
+each material has to loop over, prop blur, and draw distance. Low turns shadows
+off entirely and thins the treeline to a third.
 
 ## Locations
 
@@ -132,6 +167,13 @@ Two test suites back this up: `test2.js` covers behaviour and UI, and
 `physics-check.js` measures hover throttle, thrust-to-weight, per-axis step
 response, dive and flat-fall terminal velocities, top speed, endurance, sag, and
 the three idle modes, asserting each lands in a realistic range.
+
+## Main menu
+
+A semicircular dial on the left, and a live showcase flight on the right — the
+same renderer and the same airframe, flown along a baked spline through a lit
+ring course, with three cinematic camera shots on rotation. It is a scripted
+line rather than an autopilot: repeatable, and honest about being a demo.
 
 ## HUD
 

@@ -1174,13 +1174,14 @@ var Input = {
             else if (b === 3) e.camera = true;
             else if (b === 4) e.flightMode = true;   // L1  AUX: flight mode
             else if (b === 5) e.rates = true;        // R1  AUX: rate profile
-            else if (b === 6) e.beeper = true;       // L2  AUX: lost-model beeper
+            else if (b === 6 && !this.mode.hold) e.beeper = true;   // L2 AUX: beeper
             else if (b === 7) e.turtle = true;       // R2  AUX: turtle mode
             else if (b === 8) this.restartPressed();
             else if (b === 9) e.pause = true;
           }
         }
-        if (b === 7) this.turtleHeld = pressed;
+        if (b === 6) this.l2Held = pressed;
+        if (b === 7) { this.r2Held = pressed; this.turtleHeld = pressed; }
         this._prevButtons[b] = pressed;
       }
 
@@ -1266,13 +1267,18 @@ var Input = {
         : [['↑ ↓', 'Move'], ['Enter', 'Select'], ['Esc', 'Resume']];
     }
     var hold = this.mode && this.mode.hold;
-    return padMode
-      ? [['L stick', hold ? 'Up-down / yaw' : 'Throttle / yaw'], ['R stick', hold ? 'Move' : 'Pitch / roll'],
-         ['✕', 'Arm'], ['○', 'Reset'], ['L1', 'Flight mode'], ['R1', 'Rates'],
-         ['R2', 'Turtle'], ['△', 'Camera'], ['Share ×2', 'Restart'], ['Options', 'Pause']]
-      : [['W S', hold ? 'Forward / back' : 'Pitch'], ['A D', hold ? 'Left / right' : 'Roll'], ['Q E', 'Yaw'],
-         ['Shift Ctrl', hold ? 'Up / down' : 'Throttle'], ['Space', 'Arm'], ['R', 'Reset'],
-         ['F', 'Flight mode'], ['N', 'Rates'], ['C', 'Camera'], ['Esc', 'Pause']];
+    if (padMode) {
+      var b = [['L stick', hold ? 'Up-down / yaw' : 'Throttle / yaw'],
+               ['R stick', hold ? 'Move' : 'Pitch / roll'],
+               ['✕', 'Arm'], ['○', 'Reset'], ['L1', 'Flight mode'], ['R1', 'Rates']];
+      // A camera drone's shoulders run the gimbal; a quad's run AUX switches.
+      b = b.concat(hold ? [['L2 R2', 'Gimbal tilt']] : [['L2', 'Beeper'], ['R2', 'Turtle']]);
+      return b.concat([['△', 'View'], ['Share ×2', 'Restart'], ['Options', 'Pause']]);
+    }
+    var k = [['W S', hold ? 'Forward / back' : 'Pitch'], ['A D', hold ? 'Left / right' : 'Roll'],
+             ['Q E', 'Yaw'], ['Shift Ctrl', hold ? 'Up / down' : 'Throttle'],
+             ['Space', 'Arm'], ['R', 'Reset'], ['F', 'Flight mode'], ['N', 'Rates']];
+    return k.concat(hold ? [['[ ]', 'Gimbal tilt']] : []).concat([['C', 'View'], ['Esc', 'Pause']]);
   }
 };
 
@@ -2237,7 +2243,7 @@ function start() {
 
     // TURTLE MODE (AUX): props reverse so an upside-down quad can flip itself
     // back onto its feet without a walk of shame.
-    if (Input.turtleHeld && st.armed && st.pos.y < CFG.groundY + 0.06) {
+    if (Input.turtleHeld && !mode.hold && st.armed && st.pos.y < CFG.groundY + 0.06) {
       _right.set(1, 0, 0).applyQuaternion(st.quat);
       _up.set(0, 1, 0).applyQuaternion(st.quat);
       if (_up.y < 0.5) {
@@ -2644,9 +2650,11 @@ function start() {
 
   /* ================= CAMERA ================= */
   var camMode = 'fpv';
-  var camTilt = CFG.camTilt;
+  var camTilt = CFG.camTilt;     // FPV quad: mechanical uptilt, fixed in flight
+  var gimbalTilt = 0;            // camera drone: 3-axis gimbal, driven in flight
   var showArms = Store.data.arms !== false;
   var chasePos = new THREE.Vector3(), chaseInit = false;
+  var _euler = new THREE.Euler();
   var losQuat = new THREE.Quaternion(), losInit = false;
 
   function applyFov() {
@@ -2663,15 +2671,25 @@ function start() {
 
   function updateCamera(dt) {
     if (camMode === 'fpv') {
-      // Sat where the real camera sits: on the stack, tilted up. With prop
-      // view on it sits far enough back that the front arms are in frame.
-      var off = _v.set(0, 0.105, showArms ? -0.10 : -0.34).applyQuaternion(st.quat);
+      // A camera drone hangs its camera on a 3-axis gimbal: the horizon stays
+      // level however the aircraft banks, and only yaw follows the airframe.
+      // Its props are below and behind the lens, so they are never in shot.
+      var gimbal = Input.mode.hold;
+      var armsInView = showArms && !gimbal;
+      var off = _v.set(0, gimbal ? -0.02 : 0.105, armsInView ? -0.10 : -0.34).applyQuaternion(st.quat);
       camera.position.copy(st.pos).add(off);
-      camera.quaternion.copy(st.quat);
-      camera.rotateX(camTilt);
+      if (gimbal) {
+        _euler.set(gimbalTilt, yawOf(st.quat), 0, 'YXZ');
+        camera.quaternion.setFromEuler(_euler);
+      } else {
+        // An FPV camera is bolted to the frame: it sees exactly what the
+        // airframe sees, roll and all. That is the whole look.
+        camera.quaternion.copy(st.quat);
+        camera.rotateX(camTilt);
+      }
       parts.pod.visible = false;
       parts.lens.visible = false;
-      drone.visible = showArms;
+      drone.visible = armsInView;
     } else {
       parts.pod.visible = true;
       parts.lens.visible = true;
@@ -2769,7 +2787,10 @@ function start() {
 
     /* --- attitude: full ladder in FPV, an instrument otherwise --- */
     var vfov = camera.fov * Math.PI / 180;
-    var shownPitch = pitch + (fpv ? camTilt : 0);
+    // The ladder tracks the lens: a gimballed camera holds the horizon, so
+    // there is no aircraft pitch in its view at all.
+    var gimballed = fpv && Input.mode.hold;
+    var shownPitch = gimballed ? gimbalTilt : pitch + (fpv ? camTilt : 0);
     var inst = fpv
       ? { cx: cx, cy: cy, ppr: h / vfov, half: Math.min(w, h) * 0.40, arcR: Math.min(w, h) * 0.29, clip: 0 }
       : (function () { var r = Math.min(92, Math.min(w, h) * 0.16); return { cx: cx, cy: h - r - m - 30, ppr: r / (50 * Math.PI / 180), half: r * 0.9, arcR: r, clip: r }; })();
@@ -2780,7 +2801,7 @@ function start() {
       hx.fillStyle = 'rgba(8,10,12,0.4)'; hx.fill(); hx.clip();
     }
     hx.translate(inst.cx, inst.cy);
-    hx.rotate(-roll);
+    hx.rotate(gimballed ? 0 : -roll);
     var attCol = inverted ? '#ff7878' : 'rgba(238,242,238,0.95)';
 
     // FPV overlays the real lens, so rungs go where perspective puts them.
@@ -2894,6 +2915,10 @@ function start() {
     hx.fillRect(tbX + 1, tbY + tbH - tbH * thr, tbW - 2, tbH * thr);
     line(tbX - 3, tbY + tbH - tbH * st.motor, tbX + tbW + 3, tbY + tbH - tbH * st.motor, '#ffb020', 1.5);
     T(Input.mode.hold ? 'PWR' : 'THR', tbX, tbY - 8, { size: 10, color: 'rgba(238,242,238,0.55)' });
+    if (Input.mode.hold) {
+      T('GIMBAL ' + Math.round(gimbalTilt * 180 / Math.PI) + '°', w - m, m + 56,
+        { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
+    }
     if (Input.mode.hold && st.armed && st.holdAlt !== null) {
       T('ALT HOLD ' + st.holdAlt.toFixed(1) + 'M', tbX, tbY - 22, { size: 10, weight: 600, color: '#7dffb0' });
     }
@@ -3051,7 +3076,9 @@ function start() {
     { id: 'prop', label: 'Prop in view',
       value: function () { return showArms ? 'On' : 'Off'; },
       step: function () { showArms = !showArms; Store.data.arms = showArms; Store.save(); },
-      brief: function () { return 'Whether the front arms and prop tips clip the corners of the FPV frame, as they do on a real quad.'; } },
+      brief: function () { return Input.mode.hold
+        ? 'No effect in Camera mode — a gimballed camera sits below the props and never sees them.'
+        : 'Whether the front arms and prop tips clip the corners of the FPV frame, as they do on a real quad.'; } },
     { id: 'pitchdir', label: 'Pitch stick',
       value: function () { return Input.invertPitch ? 'Inverted' : 'Normal'; },
       step: function () { Input.invertPitch = !Input.invertPitch; Store.data.invertPitch = Input.invertPitch; Store.save(); },
@@ -3401,6 +3428,19 @@ function start() {
       toast(Store.data.sound ? 'SOUND ON' : 'SOUND OFF', '#f2ece2');
     },
     tilt: function (dir) {
+      // A camera drone's gimbal tilts on a wheel, in flight, and points down.
+      if (Input.mode.hold) {
+        gimbalTilt = clamp(gimbalTilt + dir * 4 * Math.PI / 180, -90 * Math.PI / 180, 20 * Math.PI / 180);
+        toast('GIMBAL ' + Math.round(gimbalTilt * 180 / Math.PI) + '°', '#f2ece2');
+        return;
+      }
+      // An FPV quad's camera angle is set with a screwdriver on the bench.
+      // You cannot change it in the air, so neither can you here.
+      if (st.armed || st.pos.y > CFG.groundY + 0.06) {
+        toast('CAMERA ANGLE IS FIXED — LAND AND DISARM', '#ffb020');
+        Sound.warn();
+        return;
+      }
       camTilt = clamp(camTilt + dir * 3 * Math.PI / 180, 0, 55 * Math.PI / 180);
       parts.pod.rotation.x = camTilt;
       parts.lens.rotation.x = Math.PI / 2 + camTilt;
@@ -3697,6 +3737,11 @@ function start() {
     if (Input.edges.flightMode) Input.hooks.flightMode();
     if (Input.edges.rates) Input.hooks.rates();
     if (Input.edges.beeper) Input.hooks.beeper();
+    if (Input.mode.hold) {
+      // The gimbal wheel: held, not clicked, so it sweeps like the real one.
+      var gdir = (Input.l2Held ? -1 : 0) + (Input.r2Held ? 1 : 0);
+      if (gdir) Input.hooks.tilt(gdir * dt * 14);
+    }
 
     if (!mapSpec) return;
 
@@ -3758,10 +3803,12 @@ function start() {
   window.addEventListener('resize', function () { if (!menuEl.hidden) Menu.layout(); });
   requestAnimationFrame(frame);
 
+  window.__cam = camera;
   window.__sim = { st: st, Run: Run, Menu: Menu, Pause: Pause, Input: Input, cfg: CFG, Demo: Demo,
     gfx: function () { return GFX; }, modes: FLIGHT_MODES,
     spec: function () { return mapSpec; }, cam: function () { return camMode; }, Sound: Sound,
     // Exposed so the flight model can be measured rather than taken on trust.
+    tilt: function () { return Input.mode.hold ? gimbalTilt : camTilt; },
     quad: QUAD, fc: FC, motors: MOTORS, kp: KP, profiles: RATE_PROFILES, bfRate: bfRate,
     step: function (dt) { stepPhysics(dt); }, zeroFC: zeroMotors };
 }

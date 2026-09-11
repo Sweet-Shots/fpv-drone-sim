@@ -47,8 +47,9 @@ transmitter is an **AUX switch**, and that is what the shoulder buttons are here
 | △ / Y | Camera |
 | **L1** | AUX: flight mode |
 | **R1** | AUX: rate profile |
-| **L2** | AUX: lost-model beeper |
-| **R2** | AUX: turtle mode (flip an upside-down quad back over) |
+| **L2** | AUX: lost-model beeper (Acro/Angle) |
+| **R2** | AUX: turtle mode — flip an upside-down quad back over (Acro/Angle) |
+| **L2 / R2** | Gimbal tilt wheel (Camera mode) |
 | **Share / View ×2** | Restart run |
 | **Options / Start** | Pause |
 
@@ -73,6 +74,19 @@ In Angle and Camera the throttle gimbal is a **climb-rate** command about its
 spring centre, which is how a camera drone's stick actually works, and the
 Recovery Drill disappears from the session list — a quad that levels itself has
 nothing to recover from.
+
+### The camera follows the aircraft, not the other way round
+
+An FPV quad's camera is **bolted to the frame** at a fixed uptilt you set with a
+screwdriver on the bench. So in Acro and Angle the view rolls with the airframe —
+that is the whole FPV look — and the angle can only be changed landed and
+disarmed. The front arms and prop tips clip the corners of the frame.
+
+A camera drone hangs its camera on a **3-axis gimbal**, so the horizon stays
+level however hard the aircraft banks and only yaw follows the airframe. In
+Camera mode the shoulder buttons drive the gimbal wheel in flight (−90° to +20°),
+the HUD horizon stops rolling because the lens no longer does, and the props are
+never in shot — the gimbal hangs below them.
 
 ## Rate profiles
 

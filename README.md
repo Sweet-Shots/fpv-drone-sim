@@ -1,80 +1,128 @@
-# Acro FPV — browser drone racing simulator
+# Acro FPV
 
-A single-file FPV quadcopter simulator. Open `index.html` in any modern browser —
-no build step, no server, no install. Three.js is pulled from a CDN at runtime.
+A rate-mode FPV quadcopter simulator in one HTML file. Open `index.html` in any
+modern browser — no build step, no server, no install. Three.js loads from a CDN
+at runtime.
 
 ```
 open index.html          # macOS
 xdg-open index.html      # Linux
 ```
 
-## Controls
+## Flying it
 
-Keyboard and gamepad work interchangeably at all times. A gamepad is used
-automatically when one is connected and you move a stick or press a button;
-touching the keyboard hands control straight back. The panel in the top-right
-always shows which device is currently flying the quad.
+The sim is **acro (rate) mode**: the sticks command angular *rates*, not angles,
+and the quad holds whatever attitude you leave it in. Nothing self-levels.
+
+Keyboard and gamepad are fully interchangeable and neither is required. A gamepad
+takes over the moment you move a stick or press a button; touching the keyboard
+hands control straight back. Only the active device's bindings are ever shown on
+screen.
 
 ### Keyboard
 | Key | Action |
 | --- | --- |
-| `W` / `S` or `↑` / `↓` | Pitch forward / back |
-| `A` / `D` or `←` / `→` | Roll left / right |
-| `Q` / `E` | Yaw left / right |
-| `Shift` / `Ctrl` | Throttle up / down (ramped, holds where you leave it) |
+| `W` `S` or `↑` `↓` | Pitch |
+| `A` `D` or `←` `→` | Roll |
+| `Q` `E` | Yaw |
+| `Shift` `Ctrl` | Throttle up / down |
 | `Space` | Arm / disarm |
-| `R` | Reset drone to the pad |
+| `R` | Reset drone |
+| `C` / `V` | Camera / prop-in-view |
+| `Backspace` ×2 | Restart run |
+| `Esc` | Pause |
 
-### Gamepad (Mode 2, standard mapping — PS4/PS5/Xbox all work)
+### Gamepad (Mode 2, standard mapping — PS4/PS5/Xbox)
 | Control | Action |
 | --- | --- |
-| Left stick | Throttle (Y) / yaw (X) |
-| Right stick | Pitch (Y) / roll (X) |
+| Left stick | Throttle / yaw |
+| Right stick | Pitch / roll |
 | ✕ / A | Arm / disarm |
 | ○ / B | Reset drone |
-| △ / Y | Toggle FPV / chase camera |
-| Options / Start | Restart lap timing |
+| □ / X | Prop-in-view |
+| △ / Y | Camera |
+| **Share / View ×2** | Restart run |
+| **Options / Start** | Pause |
 
-### General
-| Key | Action |
+Arming is blocked above 12% throttle, the same check a real flight controller
+does, and every run starts at idle.
+
+## Rate profiles
+
+Real freestyle quads run 600–900°/s, which is two rolls a second. That is not a
+bug in the feel — it is what acro rates are — but nobody learns on them, and a
+keyboard's on/off keys make it worse than a real gimbal. Three profiles are
+selectable in the menu and in the pause screen:
+
+| Profile | Roll rate | For |
+| --- | --- | --- |
+| Cruise | 260°/s | What a trainer quad ships with |
+| Sport | 420°/s | Quick but recoverable — start here |
+| Acro | 700°/s | Real freestyle rates, unforgiving |
+
+Each profile carries its own expo and stick smoothing.
+
+## Sessions
+
+| Session | What it is |
 | --- | --- |
-| `C` | FPV / chase camera |
-| `T` | Throttle mode: absolute (stick position) or ramped (stick deflection) |
-| `[` / `]` | Camera uptilt |
-| `H` | Hide the controls panel |
+| Free Flight | No clock, no gates |
+| Time Trial | Three laps against the clock, gate splits live |
+| Gate Rush | 45 seconds; every gate taken adds four more |
+| Recovery Drill | Dropped inverted and tumbling — stop the spin, get upright, hold it before the ground arrives. Each round starts lower and spins harder |
+| Line of Sight | The camera stays on the ground where you are standing, as at a real field |
 
-Arming is blocked above 12% throttle, the same safety check a real flight
-controller does.
+## Locations
+
+**Sunset Field** — open grass, low sun, wind off the treeline.
+**Night Circuit** — lit gates and little else; you fly the LEDs, not the ground.
+**The Hangar** — indoor, no wind, concrete, tight lines between pillars.
+
+Best lap, most gates and most rounds are kept per location per session in
+`localStorage`.
 
 ## Flight model
 
-Rate mode (acro) — the sticks command **angular rates**, not angles, and the
-quad holds whatever attitude you leave it in. There is no self-levelling.
+- **Rates** are commanded, never angles. Commanded rates are reached through a
+  first-order lag (40–100 ms per axis, yaw heaviest), so the airframe carries
+  rotational momentum instead of snapping.
+- **Control authority follows the motors.** Torque comes from differential
+  thrust, so near zero throttle you have almost none — which is why a tumbling
+  quad has to be spooled up before it can be caught. This is the whole point of
+  the recovery drill.
+- **Thrust** is a single body-up force, ~2.6 g at full throttle, behind a 60 ms
+  motor spool. Hover sits near 38%.
+- **Battery** is a 4S pack that sags under draw and loses thrust as it drains;
+  flat ends the flight.
+- **Wind** is a per-location constant plus a gust cycle, stronger with altitude.
+  The hangar has none.
+- **Translation** adds gravity plus linear and quadratic drag, giving a terminal
+  velocity and carrying you wide out of turns.
+- **Collisions** with ground, pylons, walls, ceiling and gate rings all push
+  back; an impact above 9 m/s disarms you.
+- Physics runs on a fixed 240 Hz step decoupled from the render loop, so feel
+  does not change with frame rate.
 
-- **Rates:** 700°/s roll, 620°/s pitch, 380°/s yaw at full stick, with expo on
-  every axis for fine centre resolution.
-- **Rotational momentum:** commanded rates are reached through a first-order lag
-  (~40–75 ms per axis, yaw heaviest), so the airframe carries rotation rather
-  than snapping between rates.
-- **Thrust:** a single body-up force, ~2.6 g at full throttle, run through a
-  60 ms motor spool so throttle punches are not instant. Hover sits near 38%.
-- **Translation:** gravity plus linear and quadratic drag, which gives the quad
-  a terminal velocity and makes it drift on momentum out of turns.
-- **Collisions:** ground, pylons and gate rings all push back; an impact above
-  9 m/s disarms you.
-- Physics runs on a fixed 240 Hz step decoupled from the render loop, so the
-  feel does not change with frame rate.
+Tuning lives in `CFG` and `RATE_PROFILES` at the top of the script.
 
-Tuning constants live in the `CFG` object near the top of the script.
+## HUD
 
-## Course and HUD
+Betaflight-style OSD drawn straight on the video: no panels. Throttle bar with a
+tick for actual spooled motor output, pack voltage, speed, altitude, next-gate
+range with corner brackets and an off-screen director arrow. In FPV the pitch
+ladder is projected by tangent rather than linearly, so the HUD horizon sits
+exactly on the rendered one at wide FOV; in chase and line-of-sight views it
+becomes a bezelled attitude ball instead.
 
-Six gates form a loop around the launch pad; the next gate glows orange and the
-HUD shows its range, with an off-screen arrow when it is behind you. Passing
-gate 1 starts the clock, and lap and best-lap times appear in the top-right.
-Pylons and distant blocks give parallax cues for judging speed and altitude.
+Audio is synthesised at runtime with WebAudio — four detuned motors whose pitch
+follows RPM, airflow noise driven by airspeed, plus gate, crash and arming tones.
+No audio assets.
 
-The HUD carries a throttle bar (with a tick for actual spooled motor output),
-altitude and speed, and an attitude indicator: a full-screen pitch ladder and
-horizon locked to the camera in FPV, and a bezelled attitude ball in chase view.
-Both cameras are rigidly tied to the airframe — there is no free orbit camera.
+## Publishing
+
+`index.html` is the whole app. The hosted Claude Artifact variant is generated
+from it, since that host supplies its own document wrapper:
+
+```
+python3 build-artifact.py
+```

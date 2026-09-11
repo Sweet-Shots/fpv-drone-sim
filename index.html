@@ -6,243 +6,456 @@
 <title>Acro FPV</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
-    --hud: #6ef2c0;
-    --hud-dim: rgba(110, 242, 192, 0.55);
-    --warn: #ff5b5b;
-    --ok: #7dff8a;
-    --panel: rgba(6, 14, 18, 0.72);
-    --line: rgba(110, 242, 192, 0.25);
-    --label: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif;
-    --data: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ink: #f2ece2;          /* paper-white, warm */
+    --ink-dim: #8c9198;
+    --ink-faint: #565c63;
+    --ground: #0b0c0e;       /* near-black, slight blue */
+    --ground-2: #121417;
+    --flag: #ff5c16;         /* safety orange: pylons, course flags */
+    --flag-deep: #c33d08;
+    --live: #7dffb0;         /* telemetry green */
+    --alert: #ff4d4d;
+    --amber: #ffb020;
+    --rule: rgba(242, 236, 226, 0.14);
+    --rule-strong: rgba(242, 236, 226, 0.32);
+    --display: 'Saira Condensed', 'Arial Narrow', system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    /* PlayStation face-button glyphs are not in every mono face. */
+    --sym: 'IBM Plex Mono', 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols 2', ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     margin: 0;
-    background: #05080b;
-    color: var(--hud);
-    font: 500 13px/1.45 var(--label);
-    font-variant-numeric: tabular-nums;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 13px;
     overflow: hidden;
     -webkit-user-select: none;
     user-select: none;
     touch-action: none;
   }
   canvas { display: block; }
-  #scene, #hud {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
+  #scene, #hud { position: fixed; inset: 0; width: 100%; height: 100%; }
   #hud { pointer-events: none; }
 
-  .panel {
+  /* ================= in-flight: OSD text only, no panels ================= */
+  #hint {
     position: fixed;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px 12px;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+    left: 18px;
+    bottom: 16px;
+    max-width: min(560px, calc(100vw - 36px));
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.9;
+    color: rgba(238, 242, 238, 0.82);
+    text-shadow: 0 0 3px #000, 0 1px 2px #000;
+    pointer-events: none;
+    transition: opacity 0.4s;
   }
-
-  /* --- top left: status --- */
-  #status { top: 12px; left: 12px; min-width: 210px; }
-  #status .row { display: flex; justify-content: space-between; gap: 16px; }
-  #status .label { color: var(--hud-dim); letter-spacing: 0.08em; }
-  #status .row span:last-child { font-family: var(--data); }
-  .pill {
+  #hint b {
+    font-family: var(--sym);
     display: inline-block;
-    padding: 1px 8px;
-    border-radius: 999px;
-    border: 1px solid currentColor;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+    min-width: 0;
+    padding: 0 5px;
+    margin-right: 5px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.28);
   }
-  .pill.armed { color: var(--warn); animation: pulse 1.1s ease-in-out infinite; }
-  .pill.safe { color: var(--hud-dim); }
-  @keyframes pulse { 50% { opacity: 0.45; } }
-
-  /* --- top right: input + race --- */
-  #inputbox { top: 12px; right: 12px; min-width: 230px; }
-  #inputbox .mode {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-  }
-  #inputbox .dot {
-    width: 9px; height: 9px; border-radius: 50%;
-    background: var(--hud);
-    box-shadow: 0 0 10px currentColor;
-  }
-  #inputbox.gamepad .dot { background: #8fd0ff; color: #8fd0ff; }
-  #inputbox.gamepad .mode { color: #8fd0ff; }
-  #padname {
-    color: var(--hud-dim);
-    font-family: var(--data);
-    font-size: 11px;
-    margin-top: 4px;
-    max-width: 240px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  #race { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
-  #race .row { display: flex; justify-content: space-between; gap: 16px; }
-  #race .label { color: var(--hud-dim); letter-spacing: 0.08em; }
-  #race .row span:last-child { font-family: var(--data); }
-
-  /* --- bottom left: help --- */
-  #help { bottom: 12px; left: 12px; max-width: 340px; }
-  #help h2 {
-    margin: 0 0 6px;
-    font-size: 12px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--hud-dim);
-  }
-  #help table { border-collapse: collapse; width: 100%; }
-  #help td { padding: 1px 0; vertical-align: top; }
-  #help td.k { color: #cfe9e0; white-space: nowrap; padding-right: 10px; font-family: var(--data); font-size: 12px; }
-  #help .sec { color: var(--hud-dim); padding-top: 6px; letter-spacing: 0.1em; }
-  #help.collapsed .body { display: none; }
-  #helptoggle {
-    pointer-events: auto;
-    cursor: pointer;
-    float: right;
-    color: var(--hud-dim);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 0 6px;
-    margin: -2px 0 0 8px;
-  }
-
-  /* --- center toast --- */
-  #touchnote {
-    left: 50%;
-    bottom: 18px;
-    transform: translateX(-50%);
-    max-width: min(420px, calc(100vw - 32px));
-    text-align: center;
-    color: #ffc042;
-    border-color: rgba(255, 192, 66, 0.4);
-  }
-  #touchnote strong { color: #ffdd9a; }
+  #hint span { margin-right: 16px; white-space: nowrap; }
+  #hint.gone { opacity: 0; }
 
   #toast {
     position: fixed;
     left: 50%;
-    top: 22%;
+    top: 26%;
     transform: translate(-50%, -50%);
-    font-size: 26px;
-    font-weight: 800;
-    letter-spacing: 0.18em;
+    font-family: var(--display);
+    font-size: 34px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
     text-align: center;
     opacity: 0;
-    transition: opacity 0.25s;
-    text-shadow: 0 0 18px rgba(0, 0, 0, 0.95);
+    transition: opacity 0.2s;
+    text-shadow: 0 2px 12px #000, 0 0 3px #000;
     pointer-events: none;
+    white-space: nowrap;
   }
   #toast.show { opacity: 1; }
 
-  /* --- boot / error --- */
-  #boot {
+  /* ================= overlays: menu + pause ================= */
+  .screen {
     position: fixed;
     inset: 0;
+    z-index: 5;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    align-items: center;
-    justify-content: center;
-    background: #05080b;
-    text-align: center;
-    padding: 24px;
-    z-index: 10;
+    background: var(--ground);
+    overflow: auto;
+    overscroll-behavior: contain;
   }
-  #boot h1 { font-size: 18px; letter-spacing: 0.3em; margin: 0; }
-  #boot p { color: var(--hud-dim); max-width: 460px; margin: 0; }
-  #boot.hide { display: none; }
-  .err { color: var(--warn); }
+  .screen[hidden] { display: none; }
+  #pause { background: rgba(11, 12, 14, 0.93); }
 
-  @media (max-width: 720px) {
-    body { font-size: 11px; }
-    #help { display: none; }
-    #status, #inputbox { min-width: 0; padding: 7px 9px; }
+  /* grain + a ghosted gate glyph: the room this thing lives in */
+  .screen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 60% at 78% 42%, rgba(255, 92, 22, 0.07), transparent 70%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.014) 0 1px, transparent 1px 3px);
+  }
+  #gateglyph {
+    position: absolute;
+    right: -6%;
+    top: 50%;
+    transform: translateY(-50%);
+    width: min(52vw, 620px);
+    opacity: 0.075;
+    pointer-events: none;
+  }
+
+  .wrap {
+    position: relative;
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-block: clamp(20px, 4vh, 46px);
+    padding-inline: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(16px, 3vh, 30px);
+    flex: 1;
+  }
+
+  /* --- masthead --- */
+  .mast { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .lockup { display: flex; align-items: baseline; gap: 10px; }
+  .lockup h1 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(38px, 7vw, 76px);
+    line-height: 0.86;
+    letter-spacing: -0.015em;
+    text-transform: uppercase;
+  }
+  .lockup h1 em {
+    font-style: normal;
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--flag);
+    text-stroke: 1.5px var(--flag);
+  }
+  .mast .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-dim);
+    text-align: right;
+    line-height: 1.7;
+    letter-spacing: 0.04em;
+  }
+  .mast .meta b { color: var(--ink); font-weight: 500; }
+
+  .rule { height: 1px; background: var(--rule); }
+  .rule.strong { background: var(--rule-strong); }
+
+  /* --- three-column selection board --- */
+  .board {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr 1fr;
+    gap: 0;
+    border-top: 1px solid var(--rule-strong);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  .col { padding: 14px 18px 16px; border-right: 1px solid var(--rule); }
+  .col:last-child { border-right: 0; }
+  .col > h2 {
+    margin: 0 0 12px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .col.focused > h2 { color: var(--flag); }
+
+  .opt {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 8px 7px 10px;
+    border: 0;
+    border-left: 2px solid transparent;
+    background: none;
+    color: var(--ink-dim);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .opt .code {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+  }
+  .opt .name {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 19px;
+    letter-spacing: 0.015em;
+    text-transform: uppercase;
+    line-height: 1.1;
+  }
+  .opt .sub {
+    grid-column: 2;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    line-height: 1.5;
+    margin-top: 3px;
+    display: none;
+  }
+  .opt:hover { color: var(--ink); }
+  .opt[aria-selected="true"] { color: var(--ink); border-left-color: var(--flag); background: rgba(255, 92, 22, 0.05); }
+  .opt[aria-selected="true"] .code { color: var(--flag); }
+  .opt[aria-selected="true"] .sub { display: block; }
+  .opt:focus-visible { outline: 1px solid var(--flag); outline-offset: -1px; }
+
+  /* --- setup rows (toggles / cycles) --- */
+  .setrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 8px 8px 8px 10px;
+    border: 0;
+    border-left: 2px solid transparent;
+    background: none;
+    color: var(--ink-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .setrow .v {
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .setrow[aria-selected="true"] { color: var(--ink); border-left-color: var(--flag); background: rgba(255, 92, 22, 0.05); }
+  .setrow[aria-selected="true"] .v { color: var(--flag); }
+  .setrow:focus-visible { outline: 1px solid var(--flag); outline-offset: -1px; }
+  .setrow .v::before { content: '‹ '; color: var(--ink-faint); }
+  .setrow .v::after { content: ' ›'; color: var(--ink-faint); }
+
+  /* --- briefing strip --- */
+  .brief { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: start; flex: 1; }
+  .brief .desc {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: var(--ink-dim);
+    max-width: 62ch;
+  }
+  .brief .desc b { color: var(--ink); font-weight: 500; }
+  .record {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    text-align: right;
+    letter-spacing: 0.06em;
+    line-height: 1.9;
+    white-space: nowrap;
+  }
+  .record .t {
+    display: block;
+    font-family: var(--display);
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--amber);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- footer: device-specific bindings only --- */
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .binds { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+  .binds span { white-space: nowrap; }
+  .binds b {
+    font-family: var(--sym);
+    display: inline-block;
+    padding: 1px 6px;
+    margin-right: 6px;
+    font-weight: 500;
+    color: var(--ink);
+    border: 1px solid var(--rule-strong);
+  }
+  .device {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    white-space: nowrap;
+  }
+  .device .dot { width: 7px; height: 7px; background: var(--live); box-shadow: 0 0 8px var(--live); }
+  .device.pad .dot { background: #64b5ff; box-shadow: 0 0 8px #64b5ff; }
+  .device b { color: var(--ink); font-weight: 600; }
+
+  .go {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 26px;
+    border: 0;
+    background: var(--flag);
+    color: #140800;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .go:hover { background: #ff7738; }
+  .go:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .go kbd {
+    font-family: var(--sym);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0;
+    padding: 2px 6px;
+    background: rgba(0, 0, 0, 0.22);
+  }
+
+  /* --- pause --- */
+  #pause .wrap { max-width: 560px; justify-content: center; }
+  #pause h2.title {
+    margin: 0;
+    font-family: var(--display);
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #pause .sub { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+  .menulist { display: flex; flex-direction: column; border-top: 1px solid var(--rule); }
+  .menulist .setrow, .menulist .opt { border-bottom: 1px solid var(--rule); }
+
+  /* --- boot --- */
+  #boot {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; flex-direction: column; gap: 14px;
+    align-items: center; justify-content: center;
+    background: var(--ground); text-align: center; padding: 24px;
+  }
+  #boot .lockup h1 { font-size: clamp(34px, 6vw, 58px); }
+  #boot p { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--ink-dim); max-width: 52ch; line-height: 1.7; }
+  #boot .bar { width: min(280px, 60vw); height: 2px; background: var(--rule); overflow: hidden; }
+  #boot .bar i { display: block; height: 100%; width: 38%; background: var(--flag); animation: slide 1.1s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(360%); } }
+  #boot[hidden] { display: none; }
+  .err { color: var(--alert) !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #boot .bar i { animation: none; width: 100%; }
+    * { transition-duration: 0.01ms !important; }
+  }
+
+  @media (max-width: 860px) {
+    .board { grid-template-columns: 1fr; }
+    .col { border-right: 0; border-bottom: 1px solid var(--rule); }
+    .col:last-child { border-bottom: 0; }
+    .brief { grid-template-columns: 1fr; }
+    .record { text-align: left; }
+    #gateglyph { display: none; }
+    #hint { display: none; }
   }
 </style>
 </head>
 <body>
+
 <canvas id="scene"></canvas>
 <canvas id="hud"></canvas>
 
+<div id="hint"></div>
+<div id="toast"></div>
+
+<!-- ============================ main menu ============================ -->
+<div class="screen" id="menu" hidden>
+  <svg id="gateglyph" viewBox="0 0 200 200" fill="none" aria-hidden="true">
+    <circle cx="100" cy="88" r="68" stroke="var(--flag)" stroke-width="7"/>
+    <circle cx="100" cy="88" r="54" stroke="var(--flag)" stroke-width="2"/>
+    <path d="M58 140 L48 196 M142 140 L152 196" stroke="var(--flag)" stroke-width="7"/>
+  </svg>
+  <div class="wrap">
+    <div class="mast">
+      <div class="lockup"><h1>Acro <em>FPV</em></h1></div>
+      <div class="meta">
+        RATE-MODE FLIGHT TRAINER<br>
+        <b id="m-rates">SPORT</b> RATES &middot; <b id="m-batt">4S</b> &middot; NO SELF-LEVEL
+      </div>
+    </div>
+
+    <div class="board">
+      <div class="col" id="col-mode"><h2>Session</h2></div>
+      <div class="col" id="col-map"><h2>Location</h2></div>
+      <div class="col" id="col-setup"><h2>Setup</h2></div>
+    </div>
+
+    <div class="brief">
+      <div class="desc" id="briefdesc"></div>
+      <div class="record" id="briefrecord"></div>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="foot">
+      <button class="go" id="startbtn" type="button">Launch <kbd id="gokey">Enter</kbd></button>
+      <div class="device" id="devbadge"><span class="dot"></span><b>Keyboard</b></div>
+    </div>
+    <div class="binds" id="menubinds"></div>
+  </div>
+</div>
+
+<!-- ============================== pause ============================== -->
+<div class="screen" id="pause" hidden>
+  <div class="wrap">
+    <h2 class="title">Paused</h2>
+    <div class="sub" id="pausesub"></div>
+    <div class="rule strong"></div>
+    <div class="menulist" id="pauselist"></div>
+    <div class="binds" id="pausebinds"></div>
+  </div>
+</div>
+
+<!-- =============================== boot =============================== -->
 <div id="boot">
-  <h1>ACRO FPV</h1>
+  <div class="lockup"><h1>Acro <em>FPV</em></h1></div>
+  <div class="bar"><i></i></div>
   <p id="bootmsg">Loading renderer&hellip;</p>
 </div>
 
-<div class="panel" id="status" hidden>
-  <div class="row"><span class="label">STATE</span><span id="armpill" class="pill safe">DISARMED</span></div>
-  <div class="row"><span class="label">THROTTLE</span><span id="thr">0%</span></div>
-  <div class="row"><span class="label">SPEED</span><span id="spd">0.0 m/s</span></div>
-  <div class="row"><span class="label">ALT</span><span id="alt">0.0 m</span></div>
-  <div class="row"><span class="label">CAMERA</span><span id="cam">FPV</span></div>
-</div>
-
-<div class="panel" id="inputbox" hidden>
-  <div class="mode"><span class="dot"></span><span id="inputmode">KEYBOARD</span></div>
-  <div id="padname">No gamepad detected — keyboard active</div>
-  <div id="race">
-    <div class="row"><span class="label">NEXT GATE</span><span id="gateinfo">1 / 6</span></div>
-    <div class="row"><span class="label">LAP</span><span id="laptime">--.--</span></div>
-    <div class="row"><span class="label">BEST</span><span id="besttime">--.--</span></div>
-  </div>
-</div>
-
-<div class="panel" id="help" hidden>
-  <span id="helptoggle">H</span>
-  <h2>Controls</h2>
-  <div class="body">
-    <table>
-      <tr><td class="sec" colspan="2">KEYBOARD</td></tr>
-      <tr><td class="k">W / S &nbsp;or&nbsp; &uarr;/&darr;</td><td>Pitch forward / back</td></tr>
-      <tr><td class="k">A / D &nbsp;or&nbsp; &larr;/&rarr;</td><td>Roll left / right</td></tr>
-      <tr><td class="k">Q / E</td><td>Yaw left / right</td></tr>
-      <tr><td class="k">Shift / Ctrl</td><td>Throttle up / down</td></tr>
-      <tr><td class="k">Space</td><td>Arm / disarm</td></tr>
-      <tr><td class="k">R</td><td>Reset drone</td></tr>
-      <tr><td class="sec" colspan="2">GAMEPAD (Mode 2)</td></tr>
-      <tr><td class="k">Left stick</td><td>Throttle / yaw</td></tr>
-      <tr><td class="k">Right stick</td><td>Pitch / roll</td></tr>
-      <tr><td class="k">&#10005; / A</td><td>Arm / disarm</td></tr>
-      <tr><td class="k">&#9711; / B</td><td>Reset drone</td></tr>
-      <tr><td class="k">&#9651; / Y</td><td>Camera view</td></tr>
-      <tr><td class="k">Options / Start</td><td>Restart lap timing</td></tr>
-      <tr><td class="sec" colspan="2">GENERAL</td></tr>
-      <tr><td class="k">C</td><td>FPV / chase camera</td></tr>
-      <tr><td class="k">T</td><td>Throttle: absolute / ramped</td></tr>
-      <tr><td class="k">[ / ]</td><td>Camera uptilt</td></tr>
-      <tr><td class="k">H</td><td>Hide this panel</td></tr>
-    </table>
-  </div>
-</div>
-
-<div class="panel" id="touchnote" hidden>
-  This sim needs a <strong>keyboard</strong> or a <strong>gamepad</strong> — there are no touch controls.
-  Pair a controller, or open it on a laptop.
-</div>
-
-<div id="toast"></div>
-
 <script>
 /* ------------------------------------------------------------------ *
- * Three.js loader: cdnjs first, jsDelivr as fallback.
+ * Three.js: cdnjs first, jsDelivr as fallback.
  * ------------------------------------------------------------------ */
 (function loadThree() {
   var sources = [
@@ -254,7 +467,7 @@
   (function next() {
     if (i >= sources.length) {
       msg.className = 'err';
-      msg.textContent = 'Could not load Three.js from any CDN. Check your network connection and reload.';
+      msg.textContent = 'Could not load the 3D renderer from any CDN. Check your connection and reload.';
       return;
     }
     var s = document.createElement('script');
@@ -276,120 +489,343 @@
  * TUNING
  * ================================================================== */
 var CFG = {
-  // Rate mode (acro) — commanded angular rates, degrees/second at full stick.
-  rate: { pitch: 620, roll: 700, yaw: 380 },
-  expo: { pitch: 0.42, roll: 0.42, yaw: 0.35 },
   deadzone: 0.09,
-  // Rotational momentum: time constant to reach a commanded rate (seconds).
-  // Lower = snappier. Yaw is heavier because it fights prop inertia.
-  tau: { pitch: 0.045, roll: 0.040, yaw: 0.075 },
-  // Rate decay when disarmed (props stopped, air friction only).
   idleAngDamp: 1.6,
-
-  maxThrust: 26.0,        // m/s^2 at 100% throttle (~2.65 g)
+  maxThrust: 26.0,
   gravity: 9.81,
-  dragLinear: 0.16,       // per second
-  dragQuad: 0.0125,       // per (m/s)
-  thrustSpool: 0.06,      // motor spool-up time constant (seconds)
-
-  throttleRampUp: 1.15,   // keyboard / ramped mode, units per second
+  dragLinear: 0.16,
+  dragQuad: 0.0125,
+  thrustSpool: 0.06,
+  throttleRampUp: 1.15,
   throttleRampDown: 1.35,
-
-  groundY: 0.13,          // drone rest height
-  crashSpeed: 9.0,        // impact speed that disarms
+  groundY: 0.13,
+  crashSpeed: 9.0,
   bounce: 0.22,
   friction: 0.72,
+  camTilt: 22 * Math.PI / 180,
+  fpvFov: 100,
+  chaseFov: 74,
+  losFov: 42,
+  // 4S pack: 16.8V charged, 14.0V is "land now", sag is proportional to draw.
+  battery: { cells: 4, full: 4.2, empty: 3.5, capacity: 190, sag: 0.85 }
+};
 
-  camTilt: 22 * Math.PI / 180,   // FPV camera uptilt
-  fpvFov: 105,
-  chaseFov: 72,
-  start: { x: 0, y: 0.13, z: 8, yaw: 0 }
+/* Rate profiles. Real acro quads do run 600-900 deg/s — that is not a bug,
+ * it is what freestyle rates feel like. Nobody learns on them, though. */
+var RATE_PROFILES = [
+  { id: 'cruise', name: 'Cruise', code: 'R1',
+    rate: { pitch: 240, roll: 260, yaw: 170 },
+    expo: { pitch: 0.30, roll: 0.30, yaw: 0.25 },
+    tau:  { pitch: 0.075, roll: 0.070, yaw: 0.100 },
+    smooth: 0.11,
+    desc: 'Gentle. Rates a trainer quad would ship with.' },
+  { id: 'sport', name: 'Sport', code: 'R2',
+    rate: { pitch: 380, roll: 420, yaw: 240 },
+    expo: { pitch: 0.42, roll: 0.42, yaw: 0.35 },
+    tau:  { pitch: 0.055, roll: 0.050, yaw: 0.085 },
+    smooth: 0.075,
+    desc: 'Quick but recoverable. Start here.' },
+  { id: 'acro', name: 'Acro', code: 'R3',
+    rate: { pitch: 620, roll: 700, yaw: 380 },
+    expo: { pitch: 0.50, roll: 0.50, yaw: 0.40 },
+    tau:  { pitch: 0.045, roll: 0.040, yaw: 0.075 },
+    smooth: 0.055,
+    desc: 'Real freestyle rates. Two rolls a second. Unforgiving.' }
+];
+
+var MAPS = [
+  { id: 'field', name: 'Sunset Field', code: 'M1', light: 'day',
+    desc: 'Open grass, low sun, a breeze off the treeline. Room to make mistakes.' },
+  { id: 'night', name: 'Night Circuit', code: 'M2', light: 'night',
+    desc: 'Lit gates and nothing else. You fly the LEDs, not the ground.' },
+  { id: 'hangar', name: 'The Hangar', code: 'M3', light: 'indoor',
+    desc: 'Indoor, no wind, concrete. Tight lines between the pillars.' }
+];
+
+var SCENARIOS = [
+  { id: 'free', name: 'Free Flight', code: 'S1', camera: 'fpv',
+    desc: 'No clock and no gates. Learn the airframe.' },
+  { id: 'race', name: 'Time Trial', code: 'S2', camera: 'fpv', laps: 3,
+    desc: 'Three laps of the course against the clock. Gate splits shown live.' },
+  { id: 'rush', name: 'Gate Rush', code: 'S3', camera: 'fpv', seconds: 45, bonus: 4,
+    desc: 'Forty-five seconds. Every gate you take adds four more.' },
+  { id: 'recover', name: 'Recovery Drill', code: 'S4', camera: 'fpv',
+    desc: 'Dropped inverted and tumbling. Stop the spin, get upright, hold it — before the ground arrives.' },
+  { id: 'los', name: 'Line of Sight', code: 'S5', camera: 'los',
+    desc: 'The camera stays on the ground where you are standing. Fly the course by eye, like a real field.' }
+];
+
+/* ================================================================== *
+ * SETTINGS / RECORDS  (localStorage, degrades to memory)
+ * ================================================================== */
+var Store = {
+  key: 'acrofpv.v2',
+  data: { rates: 'sport', map: 'field', scenario: 'race', arms: true, volume: 0.7, sound: true, records: {} },
+  load: function () {
+    try {
+      var raw = localStorage.getItem(this.key);
+      if (raw) {
+        var p = JSON.parse(raw);
+        for (var k in p) if (Object.prototype.hasOwnProperty.call(p, k)) this.data[k] = p[k];
+      }
+    } catch (e) { /* private mode, blocked storage: memory-only is fine */ }
+    return this.data;
+  },
+  save: function () {
+    try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) {}
+  },
+  record: function (map, scenario) {
+    return this.data.records[map + '.' + scenario];
+  },
+  setRecord: function (map, scenario, value, lowerIsBetter) {
+    var k = map + '.' + scenario, cur = this.data.records[k];
+    var better = cur === undefined || (lowerIsBetter ? value < cur : value > cur);
+    if (better) { this.data.records[k] = value; this.save(); }
+    return better;
+  }
 };
 
 /* ================================================================== *
- * INPUT — keyboard + Gamepad API, fully interchangeable
+ * AUDIO — synthesised, no assets
+ * ================================================================== */
+var Sound = {
+  ctx: null, master: null, ready: false,
+  engine: null, wind: null, running: false,
+
+  unlock: function () {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try { this.ctx = new AC(); } catch (e) { return; }
+    this.master = this.ctx.createGain();
+    this.master.gain.value = Store.data.sound ? Store.data.volume : 0;
+    this.master.connect(this.ctx.destination);
+    this.ready = true;
+  },
+
+  setVolume: function () {
+    if (this.master) this.master.gain.value = Store.data.sound ? Store.data.volume : 0;
+  },
+
+  noiseBuffer: function () {
+    if (this._nb) return this._nb;
+    var len = this.ctx.sampleRate * 2;
+    var b = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    var d = b.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this._nb = b;
+    return b;
+  },
+
+  startFlight: function () {
+    if (!this.ready || this.running) return;
+    var ctx = this.ctx, now = ctx.currentTime;
+
+    // Four motors, slightly detuned — the beat between them is the quad sound.
+    var eg = ctx.createGain(); eg.gain.value = 0;
+    var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    eg.connect(lp); lp.connect(this.master);
+    var oscs = [];
+    [1, 1.007, 0.993, 1.013].forEach(function (ratio) {
+      var o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = 90 * ratio;
+      var g = ctx.createGain(); g.gain.value = 0.25;
+      o.connect(g); g.connect(eg); o.start(now);
+      oscs.push({ osc: o, ratio: ratio });
+    });
+    var sub = ctx.createOscillator();
+    sub.type = 'sine'; sub.frequency.value = 45;
+    var subg = ctx.createGain(); subg.gain.value = 0.5;
+    sub.connect(subg); subg.connect(eg); sub.start(now);
+    this.engine = { gain: eg, lp: lp, oscs: oscs, sub: sub };
+
+    // Airflow noise, band-limited and driven by airspeed.
+    var src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer(); src.loop = true;
+    var bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 500; bp.Q.value = 0.7;
+    var wg = ctx.createGain(); wg.gain.value = 0;
+    src.connect(bp); bp.connect(wg); wg.connect(this.master);
+    src.start(now);
+    this.wind = { src: src, bp: bp, gain: wg };
+    this.running = true;
+  },
+
+  stopFlight: function () {
+    if (!this.running) return;
+    var t = this.ctx.currentTime;
+    try {
+      this.engine.gain.gain.cancelScheduledValues(t);
+      this.engine.gain.gain.setTargetAtTime(0, t, 0.05);
+      this.wind.gain.gain.setTargetAtTime(0, t, 0.05);
+      var e = this.engine, w = this.wind;
+      setTimeout(function () {
+        e.oscs.forEach(function (o) { try { o.osc.stop(); } catch (x) {} });
+        try { e.sub.stop(); } catch (x) {}
+        try { w.src.stop(); } catch (x) {}
+      }, 400);
+    } catch (e) {}
+    this.engine = null; this.wind = null; this.running = false;
+  },
+
+  // motor 0..1, spin = rate activity, speed m/s
+  flight: function (motor, spin, speed, armed) {
+    if (!this.running) return;
+    var t = this.ctx.currentTime;
+    var base = 78 + motor * 265 + spin * 22;
+    this.engine.oscs.forEach(function (o) {
+      o.osc.frequency.setTargetAtTime(base * o.ratio, t, 0.04);
+    });
+    this.engine.sub.frequency.setTargetAtTime(base * 0.5, t, 0.06);
+    this.engine.lp.frequency.setTargetAtTime(500 + motor * 3200, t, 0.05);
+    this.engine.gain.gain.setTargetAtTime(armed ? 0.05 + motor * 0.13 : 0, t, 0.05);
+    this.wind.bp.frequency.setTargetAtTime(320 + speed * 42, t, 0.08);
+    this.wind.gain.gain.setTargetAtTime(Math.min(speed / 34, 1) * 0.22, t, 0.08);
+  },
+
+  blip: function (freq, dur, type, vol, delay) {
+    if (!this.ready) return;
+    var t = this.ctx.currentTime + (delay || 0);
+    var o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+
+  sweep: function (f0, f1, dur, vol) {
+    if (!this.ready) return;
+    var t = this.ctx.currentTime;
+    var o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol || 0.1, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+
+  crash: function (intensity) {
+    if (!this.ready) return;
+    var t = this.ctx.currentTime;
+    var src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuffer();
+    var f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(1800, t);
+    f.frequency.exponentialRampToValueAtTime(90, t + 0.35);
+    var g = this.ctx.createGain();
+    g.gain.setValueAtTime(Math.min(0.45, 0.1 + intensity * 0.03), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t); src.stop(t + 0.5);
+  },
+
+  gate: function () { this.blip(880, 0.07, 'square', 0.1); this.blip(1320, 0.09, 'square', 0.09, 0.06); },
+  arm: function () { this.blip(520, 0.07, 'square', 0.1); this.blip(700, 0.07, 'square', 0.1, 0.07); this.blip(980, 0.11, 'square', 0.1, 0.14); },
+  disarm: function () { this.blip(700, 0.07, 'square', 0.09); this.blip(440, 0.12, 'square', 0.09, 0.07); },
+  move: function () { this.blip(1250, 0.025, 'square', 0.045); },
+  select: function () { this.blip(760, 0.05, 'square', 0.09); this.blip(1140, 0.07, 'square', 0.08, 0.045); },
+  back: function () { this.blip(520, 0.06, 'square', 0.07); },
+  count: function (last) { this.blip(last ? 990 : 620, last ? 0.28 : 0.11, 'square', 0.12); },
+  win: function () { [660, 880, 1320].forEach(function (f, i) { Sound.blip(f, 0.16, 'square', 0.1, i * 0.09); }); },
+  fail: function () { this.sweep(420, 90, 0.5, 0.12); },
+  warn: function () { this.blip(340, 0.1, 'square', 0.07); }
+};
+
+/* ================================================================== *
+ * INPUT — keyboard and Gamepad API, interchangeable, neither required
  * ================================================================== */
 var Input = {
-  active: 'keyboard',       // which device last produced meaningful input
+  active: 'keyboard',
   padIndex: null,
   padName: '',
   gamepadBlocked: false,
   keys: Object.create(null),
-  // Normalised control outputs, -1..1 (throttle 0..1)
   ctl: { throttle: 0, yaw: 0, pitch: 0, roll: 0 },
-  throttleMode: 'absolute', // gamepad default; keyboard always ramps
-  edges: { arm: false, reset: false, camera: false, restart: false },
+  throttleMode: 'absolute',
+  profile: RATE_PROFILES[1],
+  edges: {},
+  nav: {},
   _prevButtons: [],
-  _kbdThrottle: 0,
+  _thr: 0,
+  _navHeld: 0,
+  _restartAt: 0,
 
   init: function (hooks) {
     this.hooks = hooks;
     var self = this;
+    this.gamepadSupported = typeof navigator.getGamepads === 'function';
 
     window.addEventListener('keydown', function (e) {
-      if (e.repeat) { blockScroll(e); return; }
+      Sound.unlock();
+      if (e.repeat) { block(e); return; }
       self.keys[e.code] = true;
       self.setActive('keyboard');
-      switch (e.code) {
-        case 'Space':   hooks.toggleArm(); break;
-        case 'KeyR':    hooks.reset(); break;
-        case 'KeyC':    hooks.toggleCamera(); break;
-        case 'KeyT':    hooks.toggleThrottleMode(); break;
-        case 'KeyH':    hooks.toggleHelp(); break;
-        case 'Enter':   hooks.restartRace(); break;
-        case 'BracketLeft':  hooks.tiltCamera(-1); break;
-        case 'BracketRight': hooks.tiltCamera(1); break;
-      }
-      blockScroll(e);
+      var k = e.code;
+      // Menu navigation is handled by whoever owns the screen.
+      if (hooks.screenKey(k)) { block(e); return; }
+      if (k === 'Space') hooks.arm();
+      else if (k === 'KeyR') hooks.resetDrone();
+      else if (k === 'KeyC') hooks.camera();
+      else if (k === 'KeyV') hooks.arms();
+      else if (k === 'KeyT') hooks.throttleMode();
+      else if (k === 'KeyH') hooks.hint();
+      else if (k === 'KeyM') hooks.mute();
+      else if (k === 'BracketLeft') hooks.tilt(-1);
+      else if (k === 'BracketRight') hooks.tilt(1);
+      else if (k === 'Backspace') self.restartPressed();
+      else if (k === 'Escape' || k === 'KeyP') hooks.pause();
+      block(e);
     });
-
     window.addEventListener('keyup', function (e) { self.keys[e.code] = false; });
     window.addEventListener('blur', function () { self.keys = Object.create(null); });
+    window.addEventListener('pointerdown', function () { Sound.unlock(); });
 
-    function blockScroll(e) {
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
+    function block(e) {
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace'].indexOf(e.code) >= 0) e.preventDefault();
     }
 
     window.addEventListener('gamepadconnected', function (e) {
       self.padIndex = e.gamepad.index;
       self.padName = e.gamepad.id;
       self.setActive('gamepad');
-      hooks.toast('GAMEPAD CONNECTED', '#8fd0ff');
+      hooks.deviceChanged();
     });
     window.addEventListener('gamepaddisconnected', function (e) {
       if (self.padIndex === e.gamepad.index) {
-        self.padIndex = null;
-        self.padName = '';
+        self.padIndex = null; self.padName = '';
         self.setActive('keyboard');
-        hooks.toast('GAMEPAD DISCONNECTED — KEYBOARD ACTIVE', '#6ef2c0');
+        hooks.deviceChanged();
       }
     });
+  },
+
+  restartPressed: function () {
+    var now = performance.now();
+    if (now - this._restartAt < 2200) { this._restartAt = 0; this.hooks.restart(true); }
+    else { this._restartAt = now; this.hooks.restart(false); }
   },
 
   setActive: function (mode) {
     if (this.active === mode) return;
     this.active = mode;
-    // Hand over the current throttle in flight, but start from zero on the
-    // ground so a centred gamepad stick doesn't leave keyboard at 50%.
-    if (this.hooks && this.hooks.isArmed && !this.hooks.isArmed()) {
-      this._kbdThrottle = 0;
-      this.ctl.throttle = 0;
+    if (this.hooks) {
+      if (this.hooks.isArmed && !this.hooks.isArmed()) { this._thr = 0; this.ctl.throttle = 0; }
+      this.hooks.deviceChanged();
     }
-    if (this.hooks) this.hooks.inputChanged();
   },
 
   getPad: function () {
-    if (!navigator.getGamepads) { this.gamepadBlocked = true; return null; }
+    if (!this.gamepadSupported) { this.gamepadBlocked = true; return null; }
     var pads;
-    try {
-      pads = navigator.getGamepads();
-    } catch (err) {
-      // Some embeddings block the Gamepad API by permissions policy.
-      this.gamepadBlocked = true;
-      return null;
-    }
+    try { pads = navigator.getGamepads(); }
+    catch (err) { this.gamepadBlocked = true; return null; }
     if (!pads) return null;
-    // Prefer the remembered pad, otherwise adopt the first connected one.
     if (this.padIndex !== null && pads[this.padIndex]) return pads[this.padIndex];
     for (var i = 0; i < pads.length; i++) {
       if (pads[i] && pads[i].connected) {
@@ -402,79 +838,125 @@ var Input = {
     return null;
   },
 
-  update: function (dt) {
+  update: function (dt, inMenu) {
     var e = this.edges;
-    e.arm = e.reset = e.camera = e.restart = false;
+    e.arm = e.resetDrone = e.camera = e.arms = e.pause = false;
+    var n = this.nav;
+    n.up = n.down = n.left = n.right = n.select = n.back = false;
 
     var pad = this.getPad();
     var padActive = false;
 
     if (pad) {
       if (this.padName !== pad.id) this.padName = pad.id;
-      var lx = curve(dz(pad.axes[0] || 0), CFG.expo.yaw);
+      var p = this.profile;
+      var lx = curve(dz(pad.axes[0] || 0), p.expo.yaw);
       var ly = dz(pad.axes[1] || 0);
-      var rx = curve(dz(pad.axes[2] || 0), CFG.expo.roll);
-      var ry = curve(dz(pad.axes[3] || 0), CFG.expo.pitch);
-
-      // Any stick off-centre or button press claims "active input".
-      padActive = Math.abs(lx) > 0.02 || Math.abs(ly) > 0.02 ||
-                  Math.abs(rx) > 0.02 || Math.abs(ry) > 0.02;
+      var rx = curve(dz(pad.axes[2] || 0), p.expo.roll);
+      var ry = curve(dz(pad.axes[3] || 0), p.expo.pitch);
+      padActive = Math.abs(lx) > 0.02 || Math.abs(ly) > 0.02 || Math.abs(rx) > 0.02 || Math.abs(ry) > 0.02;
 
       for (var b = 0; b < pad.buttons.length; b++) {
         var pressed = !!(pad.buttons[b] && pad.buttons[b].pressed);
         var was = !!this._prevButtons[b];
         if (pressed) padActive = true;
         if (pressed && !was) {
-          if (b === 0) e.arm = true;         // Cross / A
-          else if (b === 1) e.reset = true;  // Circle / B
-          else if (b === 3) e.camera = true; // Triangle / Y
-          else if (b === 9) e.restart = true;// Options / Start
+          Sound.unlock();
+          if (inMenu) {
+            if (b === 0) n.select = true;
+            else if (b === 1) n.back = true;
+            else if (b === 12) n.up = true;
+            else if (b === 13) n.down = true;
+            else if (b === 14) n.left = true;
+            else if (b === 15) n.right = true;
+            else if (b === 9) e.pause = true;
+          } else {
+            if (b === 0) e.arm = true;
+            else if (b === 1) e.resetDrone = true;
+            else if (b === 2) e.arms = true;
+            else if (b === 3) e.camera = true;
+            else if (b === 8) this.restartPressed();
+            else if (b === 9) e.pause = true;
+          }
         }
         this._prevButtons[b] = pressed;
       }
 
       if (padActive) this.setActive('gamepad');
 
+      // Menu can also be driven from the left stick, with a repeat delay.
+      if (inMenu && this.active === 'gamepad') {
+        var ax = pad.axes[0] || 0, ay = pad.axes[1] || 0;
+        var mag = Math.max(Math.abs(ax), Math.abs(ay));
+        if (mag > 0.6 && this._navHeld <= 0) {
+          if (Math.abs(ay) >= Math.abs(ax)) { if (ay < 0) n.up = true; else n.down = true; }
+          else { if (ax < 0) n.left = true; else n.right = true; }
+          this._navHeld = 0.22;
+        } else if (mag < 0.35) {
+          this._navHeld = 0;
+        }
+        this._navHeld -= dt;
+      }
+
       if (this.active === 'gamepad') {
         this.ctl.yaw = lx;
         this.ctl.roll = rx;
-        this.ctl.pitch = -ry;              // stick back (+axis) = nose up
-        var stickThrottle = (-ly + 1) / 2; // -1 (up) .. 1 (down) -> 1 .. 0
+        this.ctl.pitch = -ry;
+        var stick = (-ly + 1) / 2;
         if (this.throttleMode === 'absolute') {
-          this._kbdThrottle = this.ctl.throttle = clamp(stickThrottle, 0, 1);
+          this._thr = this.ctl.throttle = clamp(stick, 0, 1);
         } else {
-          var d = stickThrottle - 0.5;
+          var d = stick - 0.5;
           if (Math.abs(d) > CFG.deadzone / 2) {
-            this._kbdThrottle += d * 2 * (d > 0 ? CFG.throttleRampUp : CFG.throttleRampDown) * dt;
+            this._thr += d * 2 * (d > 0 ? CFG.throttleRampUp : CFG.throttleRampDown) * dt;
           }
-          this.ctl.throttle = this._kbdThrottle = clamp(this._kbdThrottle, 0, 1);
+          this.ctl.throttle = this._thr = clamp(this._thr, 0, 1);
         }
         return;
       }
     }
 
     // ---- keyboard ----
+    // Keyboard menu navigation is handled directly in the keydown hook.
     var k = this.keys;
-    var pitch = (down(k, 'KeyW', 'ArrowUp') ? 1 : 0) - (down(k, 'KeyS', 'ArrowDown') ? 1 : 0);
-    var roll  = (down(k, 'KeyD', 'ArrowRight') ? 1 : 0) - (down(k, 'KeyA', 'ArrowLeft') ? 1 : 0);
-    var yaw   = (down(k, 'KeyE') ? 1 : 0) - (down(k, 'KeyQ') ? 1 : 0);
-    var up    = down(k, 'ShiftLeft', 'ShiftRight');
-    var dn    = down(k, 'ControlLeft', 'ControlRight');
+    var pitch = (held(k, 'KeyW', 'ArrowUp') ? 1 : 0) - (held(k, 'KeyS', 'ArrowDown') ? 1 : 0);
+    var roll  = (held(k, 'KeyD', 'ArrowRight') ? 1 : 0) - (held(k, 'KeyA', 'ArrowLeft') ? 1 : 0);
+    var yaw   = (held(k, 'KeyE') ? 1 : 0) - (held(k, 'KeyQ') ? 1 : 0);
+    if (held(k, 'ShiftLeft', 'ShiftRight')) this._thr += CFG.throttleRampUp * dt;
+    if (held(k, 'ControlLeft', 'ControlRight')) this._thr -= CFG.throttleRampDown * dt;
+    this._thr = clamp(this._thr, 0, 1);
 
-    if (up) this._kbdThrottle += CFG.throttleRampUp * dt;
-    if (dn) this._kbdThrottle -= CFG.throttleRampDown * dt;
-    this._kbdThrottle = clamp(this._kbdThrottle, 0, 1);
+    // Keys are on/off; ease them or every input is a full-rate step.
+    var sm = this.profile.smooth;
+    this.ctl.pitch = approach(this.ctl.pitch, pitch, dt, sm);
+    this.ctl.roll  = approach(this.ctl.roll, roll, dt, sm);
+    this.ctl.yaw   = approach(this.ctl.yaw, yaw, dt, sm * 1.35);
+    this.ctl.throttle = this._thr;
 
-    // Keys are digital: ease them so the quad doesn't snap to full rate.
-    this.ctl.pitch = approach(this.ctl.pitch, pitch, dt, 0.055);
-    this.ctl.roll  = approach(this.ctl.roll, roll, dt, 0.055);
-    this.ctl.yaw   = approach(this.ctl.yaw, yaw, dt, 0.075);
-    this.ctl.throttle = this._kbdThrottle;
-
-    function down(keys) {
+    function held(keys) {
       for (var i = 1; i < arguments.length; i++) if (keys[arguments[i]]) return true;
       return false;
     }
+  },
+
+  // Bindings for the on-screen hints — only ever the active device's.
+  bindings: function (context) {
+    var padMode = this.active === 'gamepad';
+    if (context === 'menu') {
+      return padMode
+        ? [['D-pad', 'Move'], ['✕', 'Select'], ['○', 'Back'], ['Options', 'Pause in flight']]
+        : [['↑ ↓ ← →', 'Move'], ['Enter', 'Select'], ['Esc', 'Back']];
+    }
+    if (context === 'pause') {
+      return padMode
+        ? [['D-pad', 'Move'], ['✕', 'Select'], ['Options', 'Resume']]
+        : [['↑ ↓', 'Move'], ['Enter', 'Select'], ['Esc', 'Resume']];
+    }
+    return padMode
+      ? [['L stick', 'Throttle / yaw'], ['R stick', 'Pitch / roll'], ['✕', 'Arm'], ['○', 'Reset'],
+         ['□', 'Prop view'], ['△', 'Camera'], ['Share ×2', 'Restart'], ['Options', 'Pause']]
+      : [['W S', 'Pitch'], ['A D', 'Roll'], ['Q E', 'Yaw'], ['Shift Ctrl', 'Throttle'],
+         ['Space', 'Arm'], ['R', 'Reset'], ['C', 'Camera'], ['V', 'Prop view'], ['Esc', 'Pause']];
   }
 };
 
@@ -485,9 +967,11 @@ function dz(v) {
 }
 function curve(x, expo) { return (1 - expo) * x + expo * x * x * x; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-function approach(cur, target, dt, tau) {
-  var a = 1 - Math.exp(-dt / tau);
-  return cur + (target - cur) * a;
+function approach(cur, target, dt, tau) { return cur + (target - cur) * (1 - Math.exp(-dt / tau)); }
+function fmtTime(s) {
+  if (s === null || s === undefined) return '--.--';
+  if (s >= 60) return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60).toFixed(2);
+  return s.toFixed(2);
 }
 
 /* ================================================================== *
@@ -495,418 +979,674 @@ function approach(cur, target, dt, tau) {
  * ================================================================== */
 function start() {
   var THREE = window.THREE;
+  Store.load();
 
-  /* ---------------- renderer / scene ---------------- */
-  var renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('scene'), antialias: true });
+  var renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('scene'), antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  if (THREE.sRGBEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
+  if (THREE.ACESFilmicToneMapping !== undefined) renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
 
   var scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x9fc3d8, 90, 620);
-
-  var camera = new THREE.PerspectiveCamera(CFG.fpvFov, window.innerWidth / window.innerHeight, 0.05, 2000);
+  var camera = new THREE.PerspectiveCamera(CFG.fpvFov, window.innerWidth / window.innerHeight, 0.03, 3000);
   scene.add(camera);
 
-  // Sky dome (simple vertical gradient).
-  var sky = new THREE.Mesh(
-    new THREE.SphereGeometry(900, 32, 20),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      uniforms: {
-        top: { value: new THREE.Color(0x2a6fb0) },
-        mid: { value: new THREE.Color(0x9fc3d8) },
-        bot: { value: new THREE.Color(0xd8cbb0) }
-      },
-      vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: [
-        'uniform vec3 top; uniform vec3 mid; uniform vec3 bot; varying vec3 vP;',
-        'void main(){',
-        '  float h = normalize(vP).y;',
-        '  vec3 c = h > 0.0 ? mix(mid, top, pow(h, 0.6)) : mix(mid, bot, pow(-h, 0.5));',
-        '  gl_FragColor = vec4(c, 1.0);',
-        '}'
-      ].join('\n')
-    })
-  );
-  scene.add(sky);
+  var world = new THREE.Group();
+  scene.add(world);
 
-  scene.add(new THREE.HemisphereLight(0xbcd8ee, 0x4a4437, 0.85));
-  var sun = new THREE.DirectionalLight(0xfff2dc, 1.05);
-  sun.position.set(60, 90, 40);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  var sc = sun.shadow.camera;
-  sc.near = 10; sc.far = 320; sc.left = -110; sc.right = 110; sc.top = 110; sc.bottom = -110;
-  scene.add(sun);
-
-  /* ---------------- ground ---------------- */
-  function gridTexture() {
+  /* ---------------- texture helpers ---------------- */
+  function canvasTex(size, draw, rx, ry) {
     var c = document.createElement('canvas');
-    c.width = c.height = 256;
-    var g = c.getContext('2d');
-    g.fillStyle = '#5d6b4a';
-    g.fillRect(0, 0, 256, 256);
-    g.fillStyle = '#66754f';
-    for (var i = 0; i < 220; i++) {
-      var x = Math.random() * 256, y = Math.random() * 256, r = 2 + Math.random() * 7;
+    c.width = c.height = size;
+    draw(c.getContext('2d'), size);
+    var t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx || 1, ry || rx || 1);
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 1;
+    if (THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+  function speckle(g, size, count, colors, rMin, rMax) {
+    for (var i = 0; i < count; i++) {
+      g.fillStyle = colors[(Math.random() * colors.length) | 0];
+      var x = Math.random() * size, y = Math.random() * size;
+      var r = rMin + Math.random() * (rMax - rMin);
       g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
     }
-    g.strokeStyle = 'rgba(230,240,220,0.22)';
-    g.lineWidth = 2;
-    g.strokeRect(0, 0, 256, 256);
-    return c;
   }
-  var groundTex = new THREE.CanvasTexture(gridTexture());
-  groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
-  groundTex.repeat.set(160, 160);
-  var ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(1600, 1600),
-    new THREE.MeshLambertMaterial({ map: groundTex })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  var grassTex = function () {
+    return canvasTex(512, function (g, s) {
+      g.fillStyle = '#41562f'; g.fillRect(0, 0, s, s);
+      speckle(g, s, 900, ['#4a6136', '#3a4d29', '#546b3c', '#455a31'], 3, 16);
+      // mowing stripes, the reason a field reads as a field
+      g.globalAlpha = 0.035;
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, s / 2, s);
+      g.globalAlpha = 1;
+    }, 55);
+  };
+  var asphaltTex = function () {
+    return canvasTex(512, function (g, s) {
+      g.fillStyle = '#1b1d20'; g.fillRect(0, 0, s, s);
+      speckle(g, s, 1600, ['#232629', '#141618', '#2a2d31'], 1, 4);
+    }, 60);
+  };
+  var concreteTex = function () {
+    return canvasTex(512, function (g, s) {
+      g.fillStyle = '#575654'; g.fillRect(0, 0, s, s);
+      speckle(g, s, 1400, ['#5e5d5a', '#4e4d4b', '#646360'], 1, 5);
+      g.strokeStyle = 'rgba(0,0,0,0.32)'; g.lineWidth = 3;
+      g.strokeRect(0, 0, s, s);
+    }, 14);
+  };
+  var panelTex = function () {
+    return canvasTex(256, function (g, s) {
+      g.fillStyle = '#3d4248'; g.fillRect(0, 0, s, s);
+      for (var x = 0; x < s; x += 16) {
+        g.fillStyle = (x / 16) % 2 ? '#454b52' : '#363b41';
+        g.fillRect(x, 0, 16, s);
+      }
+      g.fillStyle = 'rgba(0,0,0,0.25)';
+      g.fillRect(0, 0, s, 3);
+    }, 8, 3);
+  };
 
-  // Launch pad, so you always know where "home" is.
-  var pad = new THREE.Mesh(
-    new THREE.CircleGeometry(2.2, 40),
-    new THREE.MeshLambertMaterial({ color: 0x1d2430 })
-  );
-  pad.rotation.x = -Math.PI / 2;
-  pad.position.set(CFG.start.x, 0.02, CFG.start.z);
-  pad.receiveShadow = true;
-  scene.add(pad);
-  var padRing = new THREE.Mesh(
-    new THREE.RingGeometry(1.9, 2.2, 40),
-    new THREE.MeshBasicMaterial({ color: 0xffc042, side: THREE.DoubleSide })
-  );
-  padRing.rotation.x = -Math.PI / 2;
-  padRing.position.set(CFG.start.x, 0.03, CFG.start.z);
-  scene.add(padRing);
+  var disposables = [];
+  function track(obj) { disposables.push(obj); return obj; }
 
-  /* ---------------- race course ---------------- */
-  // Each gate: centre, yaw (course direction through it), ring radius.
-  var GATE_DEFS = [
-    { x: 0,   y: 3.0, z: -14,  yaw: 0,             r: 3.2 },
-    { x: 22,  y: 4.5, z: -38,  yaw: -Math.PI * 0.28, r: 3.0 },
-    { x: 48,  y: 2.6, z: -14,  yaw: -Math.PI * 0.62, r: 3.0 },
-    { x: 40,  y: 6.5, z: 26,   yaw: -Math.PI * 0.92, r: 3.4 },
-    { x: 4,   y: 3.2, z: 40,   yaw: Math.PI * 0.78,  r: 3.0 },
-    { x: -20, y: 5.0, z: 18,   yaw: Math.PI * 0.34,  r: 3.2 }
-  ];
+  function clearWorld() {
+    for (var i = world.children.length - 1; i >= 0; i--) world.remove(world.children[i]);
+    disposables.forEach(function (d) { if (d && d.dispose) d.dispose(); });
+    disposables = [];
+  }
 
-  var gates = [];
-  GATE_DEFS.forEach(function (d, i) {
+  function mat(opts) { return track(new THREE.MeshStandardMaterial(opts)); }
+  function basic(opts) { return track(new THREE.MeshBasicMaterial(opts)); }
+  function geo(g) { return track(g); }
+
+  /* ---------------- gates ---------------- */
+  function makeGate(d, style) {
     var g = new THREE.Group();
     g.position.set(d.x, d.y, d.z);
     g.rotation.y = d.yaw;
 
-    var ring = new THREE.Mesh(
-      new THREE.TorusGeometry(d.r, 0.16, 10, 44),
-      new THREE.MeshLambertMaterial({ color: 0x2b3446 })
-    );
-    ring.castShadow = true;
+    var ringGeo = geo(new THREE.TorusGeometry(d.r, 0.13, 10, 48));
+    var frameCol = style === 'neon' ? 0x141820 : style === 'indoor' ? 0x23262b : 0x20242c;
+    var ring = new THREE.Mesh(ringGeo, mat({ color: frameCol, roughness: 0.65, metalness: 0.25 }));
+    ring.castShadow = style === 'day';
     g.add(ring);
 
-    // Glowing inner band shows which gate is next.
-    var glow = new THREE.Mesh(
-      new THREE.TorusGeometry(d.r - 0.2, 0.07, 8, 44),
-      new THREE.MeshBasicMaterial({ color: 0x39506e })
-    );
+    // The band that lights up for the gate you are meant to take next.
+    var glowMat = basic({ color: 0x39506e, transparent: true, opacity: style === 'neon' ? 0.95 : 0.85 });
+    var glow = new THREE.Mesh(geo(new THREE.TorusGeometry(d.r - 0.17, style === 'neon' ? 0.075 : 0.055, 8, 48)), glowMat);
     g.add(glow);
 
-    // Legs down to the ground so gates read as objects in space.
+    if (style === 'day') {
+      // Course flags: cheap, and they show you the wind.
+      for (var f = 0; f < 4; f++) {
+        var a = Math.PI / 4 + f * Math.PI / 2;
+        var flag = new THREE.Mesh(geo(new THREE.PlaneGeometry(0.5, 0.34)),
+          mat({ color: f % 2 ? 0xff5c16 : 0xf2ece2, roughness: 0.9, side: THREE.DoubleSide }));
+        flag.position.set(Math.cos(a) * (d.r + 0.32), Math.sin(a) * (d.r + 0.32), 0);
+        flag.rotation.z = a;
+        g.add(flag);
+      }
+    }
+    if (style === 'indoor') {
+      for (var h = 0; h < 12; h++) {
+        var ha = (h / 12) * Math.PI * 2;
+        var chunk = new THREE.Mesh(geo(new THREE.BoxGeometry(0.3, 0.16, 0.16)),
+          mat({ color: h % 2 ? 0xffc042 : 0x1a1a1a, roughness: 0.8 }));
+        chunk.position.set(Math.cos(ha) * d.r, Math.sin(ha) * d.r, 0);
+        chunk.rotation.z = ha;
+        g.add(chunk);
+      }
+    }
+
+    // Legs to the ground (skipped where the gate hangs indoors).
+    if (d.y - d.r * 0.75 > 0.3 && !d.hang) {
+      for (var s = -1; s <= 1; s += 2) {
+        var legH = d.y - d.r * 0.72;
+        var leg = new THREE.Mesh(geo(new THREE.CylinderGeometry(0.06, 0.09, legH, 8)),
+          mat({ color: frameCol, roughness: 0.8 }));
+        leg.position.set(s * d.r * 0.7, -d.y + legH / 2 + 0.02, 0);
+        leg.castShadow = style === 'day';
+        g.add(leg);
+      }
+    }
+
+    world.add(g);
+    return {
+      def: d, group: g, glowMat: glowMat, style: style,
+      centre: new THREE.Vector3(d.x, d.y, d.z),
+      normal: new THREE.Vector3(Math.sin(d.yaw), 0, Math.cos(d.yaw)),
+      radius: d.r, prevSide: 0
+    };
+  }
+
+  /* ---------------- shared props ---------------- */
+  function addPylon(x, z, h, out) {
+    var m = new THREE.Mesh(geo(new THREE.CylinderGeometry(0.42, 0.58, h, 14)),
+      mat({ color: 0xd8452f, roughness: 0.75 }));
+    m.position.set(x, h / 2, z);
+    m.castShadow = true; m.receiveShadow = true;
+    world.add(m);
+    var band = new THREE.Mesh(geo(new THREE.CylinderGeometry(0.6, 0.6, 0.7, 14)),
+      mat({ color: 0xf2ece2, roughness: 0.8 }));
+    band.position.set(x, h * 0.66, z);
+    world.add(band);
+    out.push({ x: x, z: z, h: h, r: 0.62 });
+  }
+
+  // A treeline is 90 trees; as separate meshes that is 360 draw calls, so
+  // the whole line ships as two instanced meshes instead.
+  function addTreeline(specs) {
+    var n = specs.length;
+    var trunk = new THREE.InstancedMesh(geo(new THREE.CylinderGeometry(0.22, 0.34, 2.6, 6)),
+      mat({ color: 0x3d3026, roughness: 1 }), n);
+    var crown = new THREE.InstancedMesh(geo(new THREE.ConeGeometry(2.1, 5.6, 7)),
+      mat({ color: 0x2f4423, roughness: 1, flatShading: true }), n);
+    var m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), sc = new THREE.Vector3();
+    specs.forEach(function (t, i) {
+      var s = t[2];
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI);
+      sc.set(s, s, s);
+      pos.set(t[0], 1.3 * s, t[1]);
+      m.compose(pos, q, sc);
+      trunk.setMatrixAt(i, m);
+      pos.set(t[0], 4.4 * s, t[1]);
+      m.compose(pos, q, sc);
+      crown.setMatrixAt(i, m);
+    });
+    trunk.instanceMatrix.needsUpdate = true;
+    crown.instanceMatrix.needsUpdate = true;
+    world.add(trunk);
+    world.add(crown);
+  }
+
+  function addBarrier(x, z, yaw, len) {
+    var g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = yaw;
+    var board = new THREE.Mesh(geo(new THREE.BoxGeometry(len, 0.62, 0.1)),
+      mat({ color: 0xf2ece2, roughness: 0.85 }));
+    board.position.y = 0.62;
+    board.castShadow = true; board.receiveShadow = true;
+    g.add(board);
+    var stripe = new THREE.Mesh(geo(new THREE.BoxGeometry(len, 0.2, 0.12)),
+      mat({ color: 0xff5c16, roughness: 0.85 }));
+    stripe.position.y = 0.62;
+    g.add(stripe);
     for (var s = -1; s <= 1; s += 2) {
-      var legH = Math.max(0.1, d.y - d.r * 0.75);
-      var leg = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.09, 0.12, legH, 8),
-        new THREE.MeshLambertMaterial({ color: 0x2b3446 })
-      );
-      leg.position.set(s * d.r * 0.72, -d.y + legH / 2, 0);
-      leg.castShadow = true;
+      var leg = new THREE.Mesh(geo(new THREE.BoxGeometry(0.09, 0.62, 0.5)), mat({ color: 0xcfc8bd, roughness: 0.9 }));
+      leg.position.set(s * len * 0.45, 0.31, 0);
       g.add(leg);
     }
-
-    scene.add(g);
-
-    var normal = new THREE.Vector3(Math.sin(d.yaw), 0, Math.cos(d.yaw));
-    gates.push({
-      def: d, group: g, glow: glow,
-      centre: new THREE.Vector3(d.x, d.y, d.z),
-      normal: normal, radius: d.r,
-      index: i, prevSide: 0
-    });
-  });
-
-  // Obstacles: pylons to weave through + distant blocks for depth cues.
-  var pylons = [];
-  [[10, -26, 7], [32, -26, 6], [26, 4, 9], [-8, 6, 5], [18, 32, 8], [-14, -6, 6]].forEach(function (p) {
-    var h = p[2];
-    var m = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.45, 0.6, h, 12),
-      new THREE.MeshLambertMaterial({ color: 0xd8452f })
-    );
-    m.position.set(p[0], h / 2, p[1]);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    scene.add(m);
-    var band = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.62, 0.62, 0.8, 12),
-      new THREE.MeshLambertMaterial({ color: 0xf2f2f2 })
-    );
-    band.position.set(p[0], h * 0.65, p[1]);
-    scene.add(band);
-    pylons.push({ x: p[0], z: p[1], h: h, r: 0.62 });
-  });
-
-  var blockMat = new THREE.MeshLambertMaterial({ color: 0x8a8f98 });
-  for (var b = 0; b < 26; b++) {
-    var ang = (b / 26) * Math.PI * 2 + Math.random() * 0.2;
-    var dist = 130 + Math.random() * 220;
-    var w = 8 + Math.random() * 16, hh = 10 + Math.random() * 40, dd = 8 + Math.random() * 16;
-    var blk = new THREE.Mesh(new THREE.BoxGeometry(w, hh, dd), blockMat);
-    blk.position.set(Math.cos(ang) * dist, hh / 2, Math.sin(ang) * dist);
-    blk.rotation.y = Math.random() * Math.PI;
-    blk.castShadow = true;
-    blk.receiveShadow = true;
-    scene.add(blk);
+    world.add(g);
   }
 
-  /* ---------------- drone model ---------------- */
+  function addPad(x, z) {
+    var p = new THREE.Mesh(geo(new THREE.CircleGeometry(2.3, 44)),
+      mat({ color: 0x15181c, roughness: 0.95 }));
+    p.rotation.x = -Math.PI / 2;
+    p.position.set(x, 0.02, z);
+    p.receiveShadow = true;
+    world.add(p);
+    var ring = new THREE.Mesh(geo(new THREE.RingGeometry(1.95, 2.25, 44)),
+      basic({ color: 0xffb020, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.03, z);
+    world.add(ring);
+  }
+
+  /* ---------------- sky ---------------- */
+  var skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      top: { value: new THREE.Color(0x1f5b9a) },
+      mid: { value: new THREE.Color(0x9fc3d8) },
+      bot: { value: new THREE.Color(0xd8b98a) },
+      sunDir: { value: new THREE.Vector3(0.4, 0.25, -0.85).normalize() },
+      sunCol: { value: new THREE.Color(0xffd9a0) },
+      sunPow: { value: 1.0 }
+    },
+    vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: [
+      'uniform vec3 top; uniform vec3 mid; uniform vec3 bot; uniform vec3 sunDir; uniform vec3 sunCol; uniform float sunPow;',
+      'varying vec3 vP;',
+      'void main(){',
+      '  vec3 d = normalize(vP);',
+      '  float h = d.y;',
+      '  vec3 c = h > 0.0 ? mix(mid, top, pow(h, 0.55)) : mix(mid, bot, pow(-h, 0.45));',
+      '  float s = max(dot(d, normalize(sunDir)), 0.0);',
+      '  c += sunCol * pow(s, 340.0) * 1.5 * sunPow;',        // the disc
+      '  c += sunCol * pow(s, 6.0) * 0.20 * sunPow;',          // the haze around it
+      '  gl_FragColor = vec4(c, 1.0);',
+      '}'
+    ].join('\n')
+  });
+  var sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 20), skyMat);
+  sky.frustumCulled = false;
+  scene.add(sky);
+
+  function setSky(top, mid, bot, sunDir, sunCol, sunPow) {
+    skyMat.uniforms.top.value.setHex(top);
+    skyMat.uniforms.mid.value.setHex(mid);
+    skyMat.uniforms.bot.value.setHex(bot);
+    skyMat.uniforms.sunDir.value.copy(sunDir).normalize();
+    skyMat.uniforms.sunCol.value.setHex(sunCol);
+    skyMat.uniforms.sunPow.value = sunPow;
+  }
+
+  /* ---------------- lights (rebuilt per map) ---------------- */
+  var hemi = new THREE.HemisphereLight(0xbcd8ee, 0x4a4437, 0.8);
+  scene.add(hemi);
+  var sun = new THREE.DirectionalLight(0xfff2dc, 1.1);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1536, 1536);
+  var sc = sun.shadow.camera;
+  sc.near = 5; sc.far = 260; sc.left = -90; sc.right = 90; sc.top = 90; sc.bottom = -90;
+  sun.shadow.bias = -0.0007;
+  scene.add(sun);
+  scene.add(sun.target);
+
+  /* ================= MAP BUILDERS ================= */
+  var COURSES = {
+    field: [
+      { x: 0,   y: 3.0, z: -14, yaw: 0,               r: 3.2 },
+      { x: 22,  y: 4.6, z: -38, yaw: -Math.PI * 0.28, r: 3.0 },
+      { x: 48,  y: 2.6, z: -14, yaw: -Math.PI * 0.62, r: 3.0 },
+      { x: 40,  y: 7.0, z: 26,  yaw: -Math.PI * 0.92, r: 3.4 },
+      { x: 4,   y: 3.2, z: 40,  yaw: Math.PI * 0.78,  r: 3.0 },
+      { x: -20, y: 5.2, z: 18,  yaw: Math.PI * 0.34,  r: 3.2 }
+    ],
+    night: [
+      { x: 0,   y: 3.2, z: -16, yaw: 0,               r: 3.0 },
+      { x: 26,  y: 8.5, z: -34, yaw: -Math.PI * 0.32, r: 2.8 },
+      { x: 44,  y: 2.4, z: -6,  yaw: -Math.PI * 0.70, r: 2.8 },
+      { x: 24,  y: 10.0, z: 22, yaw: -Math.PI * 1.02, r: 3.0 },
+      { x: -10, y: 2.6, z: 34,  yaw: Math.PI * 0.70,  r: 2.8 },
+      { x: -26, y: 6.0, z: 6,   yaw: Math.PI * 0.24,  r: 3.0 }
+    ],
+    hangar: [
+      { x: 0,   y: 2.6, z: -10, yaw: 0,               r: 2.3 },
+      { x: 17,  y: 5.4, z: -22, yaw: -Math.PI * 0.33, r: 2.1, hang: true },
+      { x: 24,  y: 2.2, z: 4,   yaw: -Math.PI * 0.78, r: 2.1 },
+      { x: 2,   y: 6.2, z: 16,  yaw: Math.PI * 0.94,  r: 2.3, hang: true },
+      { x: -19, y: 2.4, z: 2,   yaw: Math.PI * 0.30,  r: 2.1 }
+    ]
+  };
+
+  function buildField() {
+    var spec = { gates: [], pylons: [], spawn: { x: 0, y: CFG.groundY, z: 8, yaw: 0 },
+      pilot: new THREE.Vector3(0, 1.65, 15), wind: { x: 1.5, z: 0.7, gust: 1.1 },
+      fog: 0xc3b696, fogNear: 90, fogFar: 620, ceiling: 0 };
+
+    setSky(0x2f6ea8, 0xbcd0d6, 0xe8bd84, new THREE.Vector3(-0.55, 0.16, -0.8), 0xffcf8f, 1.0);
+    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar);
+    hemi.color.setHex(0xc9dcf0); hemi.groundColor.setHex(0x5b5133); hemi.intensity = 0.75;
+    sun.color.setHex(0xffd9a8); sun.intensity = 1.25;
+    sun.position.set(-70, 26, -100);
+    sun.target.position.set(10, 0, 0);
+    renderer.toneMappingExposure = 1.05;
+
+    var ground = new THREE.Mesh(geo(new THREE.PlaneGeometry(1800, 1800)),
+      mat({ map: grassTex(), roughness: 1 }));
+    disposables.push(ground.material.map);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    world.add(ground);
+
+    addPad(spec.spawn.x, spec.spawn.z);
+    COURSES.field.forEach(function (d) { spec.gates.push(makeGate(d, 'day')); });
+    [[10, -26, 7], [32, -26, 6], [26, 4, 9], [-8, 6, 5], [18, 32, 8], [-14, -6, 6]]
+      .forEach(function (p) { addPylon(p[0], p[1], p[2], spec.pylons); });
+
+    addBarrier(-4, 13, 0, 9);
+    addBarrier(8, 13, 0, 9);
+    addBarrier(-22, -2, Math.PI / 2, 8);
+
+    // Treeline: keeps the horizon honest and gives you distance cues.
+    var trees = [];
+    for (var i = 0; i < 120; i++) {
+      var a = (i / 120) * Math.PI * 2 + Math.random() * 0.5;
+      var d = 95 + Math.random() * 150;
+      trees.push([Math.cos(a) * d, Math.sin(a) * d, 0.9 + Math.random() * 1.3]);
+    }
+    addTreeline(trees);
+    for (var h = 0; h < 7; h++) {
+      var ha = Math.random() * Math.PI * 2, hd = 420 + Math.random() * 380;
+      var hill = new THREE.Mesh(geo(new THREE.ConeGeometry(90 + Math.random() * 120, 40 + Math.random() * 70, 9)),
+        mat({ color: 0x4e5a4a, roughness: 1, flatShading: true }));
+      hill.position.set(Math.cos(ha) * hd, -4, Math.sin(ha) * hd);
+      world.add(hill);
+    }
+    return spec;
+  }
+
+  function buildNight() {
+    var spec = { gates: [], pylons: [], spawn: { x: 0, y: CFG.groundY, z: 10, yaw: 0 },
+      pilot: new THREE.Vector3(0, 1.65, 17), wind: { x: 0.5, z: 0.3, gust: 0.45 },
+      fog: 0x05070d, fogNear: 30, fogFar: 260, ceiling: 0, night: true };
+
+    setSky(0x05070f, 0x0a1020, 0x0d1219, new THREE.Vector3(0.5, 0.4, 0.7), 0x9fb6d8, 0.15);
+    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar);
+    hemi.color.setHex(0x2a3a55); hemi.groundColor.setHex(0x07090c); hemi.intensity = 0.28;
+    sun.color.setHex(0x9db4d8); sun.intensity = 0.22;
+    sun.position.set(60, 80, 70);
+    sun.target.position.set(0, 0, 0);
+    renderer.toneMappingExposure = 1.15;
+
+    var ground = new THREE.Mesh(geo(new THREE.PlaneGeometry(1200, 1200)),
+      mat({ map: asphaltTex(), roughness: 0.95 }));
+    disposables.push(ground.material.map);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    world.add(ground);
+
+    // Stars
+    var starGeo = geo(new THREE.BufferGeometry());
+    var pts = [];
+    for (var s = 0; s < 1400; s++) {
+      var u = Math.random() * Math.PI * 2, v = Math.random() * 0.85 + 0.05;
+      var r = 900;
+      pts.push(Math.cos(u) * Math.sin(v * Math.PI / 2) * r, Math.cos(v * Math.PI / 2) * r * 0.9 + 40, Math.sin(u) * Math.sin(v * Math.PI / 2) * r);
+    }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    var stars = new THREE.Points(starGeo, track(new THREE.PointsMaterial({ color: 0xdde6ff, size: 2.4, sizeAttenuation: false, transparent: true, opacity: 0.85, fog: false })));
+    world.add(stars);
+
+    var moon = new THREE.Mesh(geo(new THREE.SphereGeometry(26, 20, 16)), basic({ color: 0xdfe6f5, fog: false }));
+    moon.position.set(360, 300, 500);
+    world.add(moon);
+
+    // A single light that follows the active gate, rather than one per gate.
+    spec.gateLight = new THREE.PointLight(0xffffff, 3.2, 26, 2);
+    world.add(spec.gateLight);
+
+    addPad(spec.spawn.x, spec.spawn.z);
+
+    var neon = [0x22e0ff, 0xff3ea5, 0x9dff3c, 0xffb020, 0x6a7bff, 0xff5c16];
+    COURSES.night.forEach(function (d, i) {
+      var g = makeGate(d, 'neon');
+      g.neon = neon[i % neon.length];
+      // A second, larger halo ring reads from much further out at night.
+      var halo = new THREE.Mesh(geo(new THREE.TorusGeometry(d.r + 0.02, 0.05, 8, 48)),
+        basic({ color: g.neon, transparent: true, opacity: 0.9 }));
+      g.group.add(halo);
+      g.halo = halo;
+      spec.gates.push(g);
+    });
+
+    // Light poles mark the field edge without lighting the ground much.
+    for (var p = 0; p < 10; p++) {
+      var pa = (p / 10) * Math.PI * 2, pd = 58;
+      var px = Math.cos(pa) * pd, pz = Math.sin(pa) * pd;
+      var pole = new THREE.Mesh(geo(new THREE.CylinderGeometry(0.12, 0.16, 7, 8)), mat({ color: 0x1a1e24, roughness: 0.9 }));
+      pole.position.set(px, 3.5, pz);
+      world.add(pole);
+      var head = new THREE.Mesh(geo(new THREE.SphereGeometry(0.34, 10, 8)), basic({ color: 0xffd9a0 }));
+      head.position.set(px, 7.1, pz);
+      world.add(head);
+      if (p % 5 === 0) {
+        var pl = new THREE.PointLight(0xffd9a0, 1.1, 40, 2);
+        pl.position.set(px, 7.1, pz);
+        world.add(pl);
+      }
+    }
+    [[12, -24, 6], [30, 2, 7], [-16, 14, 6]].forEach(function (q) { addPylon(q[0], q[1], q[2], spec.pylons); });
+    return spec;
+  }
+
+  function buildHangar() {
+    var W = 76, D = 52, H = 15;
+    var spec = { gates: [], pylons: [], spawn: { x: 0, y: CFG.groundY, z: 18, yaw: 0 },
+      pilot: new THREE.Vector3(0, 1.65, 23), wind: { x: 0, z: 0, gust: 0 },
+      fog: 0x14161a, fogNear: 40, fogFar: 180, ceiling: H - 0.6, indoor: true,
+      bounds: { x: W / 2 - 0.6, z: D / 2 - 0.6 } };
+
+    setSky(0x0e1013, 0x0e1013, 0x0e1013, new THREE.Vector3(0, 1, 0), 0x000000, 0);
+    scene.fog = new THREE.Fog(spec.fog, spec.fogNear, spec.fogFar);
+    hemi.color.setHex(0x9aa6b4); hemi.groundColor.setHex(0x2b2b2b); hemi.intensity = 0.55;
+    sun.color.setHex(0xffffff); sun.intensity = 0.35;
+    sun.position.set(0, 40, 10);
+    sun.target.position.set(0, 0, 0);
+    renderer.toneMappingExposure = 1.0;
+
+    var floorMap = concreteTex();
+    var floor = new THREE.Mesh(geo(new THREE.PlaneGeometry(W, D)), mat({ map: floorMap, roughness: 0.88 }));
+    disposables.push(floorMap);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    world.add(floor);
+
+    var wallMap = panelTex();
+    disposables.push(wallMap);
+    var wallMat = mat({ map: wallMap, roughness: 0.85, side: THREE.DoubleSide });
+    var walls = [
+      { w: W, h: H, x: 0, y: H / 2, z: -D / 2, ry: 0 },
+      { w: W, h: H, x: 0, y: H / 2, z: D / 2, ry: Math.PI },
+      { w: D, h: H, x: -W / 2, y: H / 2, z: 0, ry: Math.PI / 2 },
+      { w: D, h: H, x: W / 2, y: H / 2, z: 0, ry: -Math.PI / 2 }
+    ];
+    walls.forEach(function (v) {
+      var m = new THREE.Mesh(geo(new THREE.PlaneGeometry(v.w, v.h)), wallMat);
+      m.position.set(v.x, v.y, v.z);
+      m.rotation.y = v.ry;
+      m.receiveShadow = true;
+      world.add(m);
+    });
+    var roof = new THREE.Mesh(geo(new THREE.PlaneGeometry(W, D)), mat({ color: 0x23262b, roughness: 0.95, side: THREE.DoubleSide }));
+    roof.rotation.x = Math.PI / 2;
+    roof.position.y = H;
+    world.add(roof);
+
+    // Roof trusses + light panels: the ceiling is half the character indoors.
+    var trussMat = mat({ color: 0x30343a, roughness: 0.8, metalness: 0.3 });
+    var bay = 0;
+    for (var t = -D / 2 + 5; t < D / 2; t += 7) {
+      var beam = new THREE.Mesh(geo(new THREE.BoxGeometry(W, 0.35, 0.35)), trussMat);
+      beam.position.set(0, H - 0.7, t);
+      world.add(beam);
+      var panel = new THREE.Mesh(geo(new THREE.PlaneGeometry(W * 0.34, 0.55)), basic({ color: 0xcabfa6 }));
+      panel.rotation.x = Math.PI / 2;
+      panel.position.set(0, H - 1.05, t);
+      world.add(panel);
+      if (bay % 3 === 1) {
+        var pl2 = new THREE.PointLight(0xfff1d8, 1.5, 46, 2);
+        pl2.position.set(0, H - 2, t);
+        world.add(pl2);
+      }
+      bay++;
+    }
+
+    // Pillars are the obstacle here — they read as collision, not decoration.
+    var pillarMat = mat({ color: 0x4a4d52, roughness: 0.9 });
+    [[-26, -14], [-26, 12], [26, -14], [26, 12]].forEach(function (p) {
+      var col = new THREE.Mesh(geo(new THREE.BoxGeometry(1.3, H, 1.3)), pillarMat);
+      col.position.set(p[0], H / 2, p[1]);
+      col.castShadow = true; col.receiveShadow = true;
+      world.add(col);
+      var hazard = new THREE.Mesh(geo(new THREE.BoxGeometry(1.36, 1.1, 1.36)), mat({ color: 0xffb020, roughness: 0.9 }));
+      hazard.position.set(p[0], 0.9, p[1]);
+      world.add(hazard);
+      spec.pylons.push({ x: p[0], z: p[1], h: H, r: 1.0, box: true });
+    });
+
+    var crateMat = mat({ color: 0x7a6344, roughness: 0.95 });
+    [[-12, -20, 2], [-10, -18, 1], [14, 20, 2], [16, 18, 1], [-30, 0, 2]].forEach(function (c) {
+      var s = 1.6 * c[2];
+      var crate = new THREE.Mesh(geo(new THREE.BoxGeometry(s, s, s)), crateMat);
+      crate.position.set(c[0], s / 2, c[1]);
+      crate.castShadow = true; crate.receiveShadow = true;
+      world.add(crate);
+      spec.pylons.push({ x: c[0], z: c[1], h: s, r: s * 0.75, box: true });
+    });
+
+    addPad(spec.spawn.x, spec.spawn.z);
+    COURSES.hangar.forEach(function (d) { spec.gates.push(makeGate(d, 'indoor')); });
+    return spec;
+  }
+
+  var BUILDERS = { field: buildField, night: buildNight, hangar: buildHangar };
+  var mapSpec = null;
+
+  /* ================= DRONE ================= */
   var drone = new THREE.Group();
   scene.add(drone);
+  var parts = { props: [], discs: [], strobes: [] };
 
-  var bodyMat = new THREE.MeshLambertMaterial({ color: 0x1b1f26 });
-  var armMat = new THREE.MeshLambertMaterial({ color: 0x33383f });
-  var body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.09, 0.34), bodyMat);
-  body.castShadow = true;
-  drone.add(body);
+  (function buildDrone() {
+    var carbon = new THREE.MeshStandardMaterial({ color: 0x16181c, roughness: 0.45, metalness: 0.35 });
+    var alu = new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.4, metalness: 0.7 });
 
-  // Camera pod, angled up like a real FPV cam.
-  var pod = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.11, 0.1), new THREE.MeshLambertMaterial({ color: 0x111418 }));
-  pod.position.set(0, 0.08, -0.12);
-  pod.rotation.x = CFG.camTilt;
-  drone.add(pod);
-  var lens = new THREE.Mesh(new THREE.CircleGeometry(0.035, 12), new THREE.MeshBasicMaterial({ color: 0x63d9ff }));
-  lens.position.set(0, 0.09, -0.17);
-  lens.rotation.x = CFG.camTilt;
-  drone.add(lens);
+    var plate = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.012, 0.30), carbon);
+    plate.castShadow = true;
+    drone.add(plate);
+    var top = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.010, 0.22), carbon);
+    top.position.y = 0.075;
+    drone.add(top);
 
-  var props = [];
-  var armPositions = [[0.19, 0.19], [-0.19, 0.19], [-0.19, -0.19], [0.19, -0.19]];
-  armPositions.forEach(function (a, idx) {
-    var ax = a[0], az = a[1];
-    var arm = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.03, 0.28), armMat);
-    arm.position.set(ax / 2, 0, az / 2);
-    arm.rotation.y = Math.atan2(ax, az);
-    arm.castShadow = true;
-    drone.add(arm);
+    // Stack + pack, the bulk you actually see under the camera.
+    var stack = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.05, 0.075), new THREE.MeshStandardMaterial({ color: 0x22262c, roughness: 0.6 }));
+    stack.position.y = 0.04;
+    drone.add(stack);
+    var pack = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.042, 0.16), new THREE.MeshStandardMaterial({ color: 0x1d2a3a, roughness: 0.55 }));
+    pack.position.set(0, 0.101, 0.03);
+    pack.castShadow = true;
+    drone.add(pack);
 
-    var motor = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.05, 10), armMat);
-    motor.position.set(ax, 0.04, az);
-    drone.add(motor);
+    // Camera pod, tilted like the real thing. Hidden when you are behind it.
+    var pod = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.095, 0.085), new THREE.MeshStandardMaterial({ color: 0x101216, roughness: 0.5 }));
+    pod.position.set(0, 0.085, -0.10);
+    pod.rotation.x = CFG.camTilt;
+    drone.add(pod);
+    var lens = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.03, 0.02, 14), new THREE.MeshStandardMaterial({ color: 0x0a1a22, roughness: 0.15, metalness: 0.8 }));
+    lens.rotation.x = Math.PI / 2 + CFG.camTilt;
+    lens.position.set(0, 0.094, -0.145);
+    drone.add(lens);
+    parts.pod = pod; parts.lens = lens;
 
-    var prop = new THREE.Mesh(
-      new THREE.BoxGeometry(0.24, 0.006, 0.03),
-      new THREE.MeshLambertMaterial({
-        color: idx % 2 ? 0x6ef2c0 : 0xff9c3f,
-        transparent: true, opacity: 0.85
-      })
-    );
-    prop.position.set(ax, 0.07, az);
-    drone.add(prop);
-    props.push({ mesh: prop, dir: idx % 2 ? 1 : -1 });
-  });
+    var ant = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.11, 6), alu);
+    ant.position.set(0, 0.115, 0.16);
+    ant.rotation.x = -0.35;
+    drone.add(ant);
+    var antTip = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), new THREE.MeshStandardMaterial({ color: 0xff5c16, roughness: 0.6 }));
+    antTip.position.set(0, 0.168, 0.175);
+    drone.add(antTip);
 
-  // Tail LED: green when armed, dim when safe.
-  var led = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), new THREE.MeshBasicMaterial({ color: 0x224433 }));
-  led.position.set(0, 0.06, 0.18);
-  drone.add(led);
+    var arms = [[0.19, 0.19], [-0.19, 0.19], [-0.19, -0.19], [0.19, -0.19]];
+    arms.forEach(function (a, i) {
+      var ax = a[0], az = a[1];
+      var arm = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.014, 0.30), carbon);
+      arm.position.set(ax / 2, 0.002, az / 2);
+      arm.rotation.y = Math.atan2(ax, az);
+      arm.castShadow = true;
+      drone.add(arm);
 
-  /* ---------------- flight state ---------------- */
+      var bell = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.032, 0.042, 12), alu);
+      bell.position.set(ax, 0.032, az);
+      bell.castShadow = true;
+      drone.add(bell);
+
+      // Two blades plus a blur disc; the disc carries the illusion at speed.
+      var bladeMat = new THREE.MeshStandardMaterial({
+        color: i % 2 ? 0x6ef2c0 : 0xff9c3f, roughness: 0.6, transparent: true, opacity: 0.95, side: THREE.DoubleSide
+      });
+      var hub = new THREE.Group();
+      hub.position.set(ax, 0.062, az);
+      for (var b = 0; b < 2; b++) {
+        // 5" prop: 0.127m across, to scale with a 0.27m motor-to-motor frame.
+        var blade = new THREE.Mesh(new THREE.BoxGeometry(0.063, 0.003, 0.018), bladeMat);
+        blade.position.set(b ? 0.032 : -0.032, 0, 0);
+        blade.rotation.z = b ? 0.12 : -0.12;
+        hub.add(blade);
+      }
+      drone.add(hub);
+      var disc = new THREE.Mesh(new THREE.CircleGeometry(0.066, 20), new THREE.MeshBasicMaterial({
+        color: i % 2 ? 0x9ffce0 : 0xffc999, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false
+      }));
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.set(ax, 0.063, az);
+      drone.add(disc);
+
+      parts.props.push({ hub: hub, dir: i % 2 ? 1 : -1, blades: bladeMat });
+      parts.discs.push(disc);
+    });
+
+    // Nav lights: green nose, red tail, white strobes on the arms.
+    var nose = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), new THREE.MeshBasicMaterial({ color: 0x224433 }));
+    nose.position.set(0, 0.02, -0.16);
+    drone.add(nose);
+    var tail = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), new THREE.MeshBasicMaterial({ color: 0x441a1a }));
+    tail.position.set(0, 0.045, 0.165);
+    drone.add(tail);
+    parts.nose = nose; parts.tail = tail;
+    [[0.2, -0.2], [-0.2, -0.2]].forEach(function (p) {
+      var st = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: 0x202020 }));
+      st.position.set(p[0], 0.05, p[1]);
+      drone.add(st);
+      parts.strobes.push(st);
+    });
+    var beacon = new THREE.PointLight(0xff3b3b, 0, 6, 2);
+    beacon.position.set(0, 0.1, 0.1);
+    drone.add(beacon);
+    parts.beacon = beacon;
+  })();
+
+  /* ================= FLIGHT STATE ================= */
   var st = {
-    pos: new THREE.Vector3(CFG.start.x, CFG.start.y, CFG.start.z),
-    vel: new THREE.Vector3(),
-    quat: new THREE.Quaternion(),
-    omega: new THREE.Vector3(),   // body rates: x=pitch, y=yaw, z=roll (rad/s)
-    armed: false,
-    motor: 0,                     // spooled thrust 0..1
-    crashes: 0
-  };
-  resetDrone(true);
-
-  var race = {
-    next: 0, lap: 0, lapStart: null, lastLap: null, best: null, started: false
+    pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+    quat: new THREE.Quaternion(), omega: new THREE.Vector3(),
+    armed: false, motor: 0, mah: 0, volts: CFG.battery.full * CFG.battery.cells,
+    crashes: 0, flightTime: 0, alive: true
   };
 
-  /* ---------------- camera state ---------------- */
-  var camMode = 'FPV';
-  var camTilt = CFG.camTilt;
-  var chasePos = new THREE.Vector3();
-  var chaseInit = false;
+  var _up = new THREE.Vector3(), _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
+  var _axis = new THREE.Vector3(), _dq = new THREE.Quaternion(), _v = new THREE.Vector3();
 
-  /* ---------------- UI wiring ---------------- */
-  var ui = {
-    status: document.getElementById('status'),
-    inputbox: document.getElementById('inputbox'),
-    help: document.getElementById('help'),
-    armpill: document.getElementById('armpill'),
-    thr: document.getElementById('thr'),
-    spd: document.getElementById('spd'),
-    alt: document.getElementById('alt'),
-    cam: document.getElementById('cam'),
-    inputmode: document.getElementById('inputmode'),
-    padname: document.getElementById('padname'),
-    gateinfo: document.getElementById('gateinfo'),
-    laptime: document.getElementById('laptime'),
-    besttime: document.getElementById('besttime'),
-    toast: document.getElementById('toast')
-  };
-  ['status', 'inputbox', 'help'].forEach(function (k) { ui[k].hidden = false; });
-  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
-    document.getElementById('touchnote').hidden = false;
-  }
-  document.getElementById('boot').classList.add('hide');
-  document.getElementById('helptoggle').addEventListener('click', toggleHelp);
-
-  var toastTimer = null;
-  function toast(text, color) {
-    ui.toast.textContent = text;
-    ui.toast.style.color = color || '#6ef2c0';
-    ui.toast.classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { ui.toast.classList.remove('show'); }, 1400);
+  function yawOf(q) {
+    _fwd.set(0, 0, -1).applyQuaternion(q);
+    return Math.atan2(-_fwd.x, -_fwd.z);
   }
 
-  function toggleArm() {
-    if (!st.armed) {
-      if (Input.ctl.throttle > 0.12) { toast('LOWER THROTTLE TO ARM', '#ffb03f'); return; }
-      st.armed = true;
-      toast('ARMED', '#ff5b5b');
-    } else {
-      st.armed = false;
-      toast('DISARMED', '#6ef2c0');
-    }
-    updateStatusChrome();
-  }
-
-  function resetDrone(silent) {
-    st.pos.set(CFG.start.x, CFG.start.y, CFG.start.z);
+  function placeAtSpawn() {
+    var s = mapSpec.spawn;
+    st.pos.set(s.x, s.y, s.z);
     st.vel.set(0, 0, 0);
     st.omega.set(0, 0, 0);
-    st.quat.setFromEuler(new THREE.Euler(0, CFG.start.yaw, 0));
+    st.quat.setFromEuler(new THREE.Euler(0, s.yaw, 0));
     st.motor = 0;
+    st.alive = true;
     chaseInit = false;
-    if (!silent) toast('RESET', '#6ef2c0');
   }
 
-  function restartRace() {
-    race.next = 0; race.lap = 0; race.lapStart = null; race.lastLap = null; race.started = false;
-    gates.forEach(function (g) { g.prevSide = 0; });
-    toast('LAP TIMING RESET', '#6ef2c0');
+  function resetBattery() {
+    st.mah = 0;
+    st.volts = CFG.battery.full * CFG.battery.cells;
   }
 
-  function toggleCamera() {
-    camMode = camMode === 'FPV' ? 'CHASE' : 'FPV';
-    camera.fov = camMode === 'FPV' ? CFG.fpvFov : CFG.chaseFov;
-    camera.updateProjectionMatrix();
-    chaseInit = false;
-    ui.cam.textContent = camMode;
-  }
-
-  function toggleThrottleMode() {
-    Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute';
-    toast('THROTTLE: ' + Input.throttleMode.toUpperCase(), '#6ef2c0');
-  }
-
-  function tiltCamera(dir) {
-    camTilt = clamp(camTilt + dir * 3 * Math.PI / 180, 0, 55 * Math.PI / 180);
-    pod.rotation.x = lens.rotation.x = camTilt;
-    toast('CAM TILT ' + Math.round(camTilt * 180 / Math.PI) + '°', '#6ef2c0');
-  }
-
-  function toggleHelp() { ui.help.classList.toggle('collapsed'); }
-
-  function updateStatusChrome() {
-    ui.armpill.textContent = st.armed ? 'ARMED' : 'DISARMED';
-    ui.armpill.className = 'pill ' + (st.armed ? 'armed' : 'safe');
-    led.material.color.setHex(st.armed ? 0x54ff8a : 0x224433);
-  }
-
-  function inputChanged() {
-    var gp = Input.active === 'gamepad';
-    ui.inputbox.classList.toggle('gamepad', gp);
-    ui.inputmode.textContent = gp ? 'GAMEPAD' : 'KEYBOARD';
-    ui.padname.textContent = gp
-      ? (Input.padName || 'Gamepad')
-      : Input.gamepadBlocked
-        ? 'Gamepad API unavailable here — keyboard only'
-        : (Input.padIndex !== null
-            ? 'Gamepad idle (' + (Input.padName || 'connected') + ') — move a stick to switch'
-            : 'No gamepad detected — keyboard active');
-  }
-
-  Input.init({
-    toggleArm: toggleArm,
-    reset: function () { resetDrone(false); },
-    toggleCamera: toggleCamera,
-    toggleThrottleMode: toggleThrottleMode,
-    toggleHelp: toggleHelp,
-    restartRace: restartRace,
-    tiltCamera: tiltCamera,
-    toast: toast,
-    inputChanged: inputChanged,
-    isArmed: function () { return st.armed; }
-  });
-
-  // Debug handle (used by the automated smoke test; harmless at runtime).
-  window.__sim = { st: st, race: race, gates: gates, cfg: CFG, input: Input };
-  updateStatusChrome();
-  inputChanged();
-
-  /* ---------------- HUD canvas ---------------- */
-  var hudCanvas = document.getElementById('hud');
-  var hx = hudCanvas.getContext('2d');
-  var HUD_FONT = '\'JetBrains Mono\', ui-monospace, monospace';
-
-  function resize() {
-    var w = window.innerWidth, h = window.innerHeight;
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    hudCanvas.width = Math.floor(w * dpr);
-    hudCanvas.height = Math.floor(h * dpr);
-    hx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  window.addEventListener('resize', resize);
-  resize();
-
-  /* ---------------- physics ---------------- */
-  var _up = new THREE.Vector3();
-  var _fwd = new THREE.Vector3();
-  var _right = new THREE.Vector3();
-  var _axis = new THREE.Vector3();
-  var _dq = new THREE.Quaternion();
+  /* ================= PHYSICS ================= */
+  var windPhase = 0;
 
   function stepPhysics(dt) {
-    var c = Input.ctl;
+    var c = Input.ctl, p = Input.profile;
 
-    // --- rotational dynamics (acro / rate mode) ---
-    var target = new THREE.Vector3(
-      c.pitch * CFG.rate.pitch * Math.PI / 180,
-      -c.yaw * CFG.rate.yaw * Math.PI / 180,   // +yaw stick = nose right = -Y rotation
-      -c.roll * CFG.rate.roll * Math.PI / 180  // +roll stick = right roll = -Z rotation
-    );
+    var tp = c.pitch * p.rate.pitch * Math.PI / 180;
+    var ty = -c.yaw * p.rate.yaw * Math.PI / 180;
+    var tr = -c.roll * p.rate.roll * Math.PI / 180;
 
     if (st.armed) {
-      // First-order lag toward the commanded rate = rotational momentum.
-      st.omega.x += (target.x - st.omega.x) * (1 - Math.exp(-dt / CFG.tau.pitch));
-      st.omega.y += (target.y - st.omega.y) * (1 - Math.exp(-dt / CFG.tau.yaw));
-      st.omega.z += (target.z - st.omega.z) * (1 - Math.exp(-dt / CFG.tau.roll));
+      // Torque comes from differential thrust, so authority follows the
+      // motors. Near zero throttle you have almost none — which is why a
+      // tumbling quad needs throttle before it can be caught.
+      var auth = 0.06 + 0.94 * Math.pow(st.motor, 0.35);
+      st.omega.x += (tp - st.omega.x) * (1 - Math.exp(-dt * auth / p.tau.pitch));
+      st.omega.y += (ty - st.omega.y) * (1 - Math.exp(-dt * auth / p.tau.yaw));
+      st.omega.z += (tr - st.omega.z) * (1 - Math.exp(-dt * auth / p.tau.roll));
     } else {
       st.omega.multiplyScalar(Math.exp(-CFG.idleAngDamp * dt));
     }
@@ -915,37 +1655,54 @@ function start() {
     if (mag > 1e-7) {
       _axis.copy(st.omega).divideScalar(mag);
       _dq.setFromAxisAngle(_axis, mag * dt);
-      st.quat.multiply(_dq).normalize();   // body-frame rotation
+      st.quat.multiply(_dq).normalize();
     }
 
-    // --- thrust with motor spool ---
     var demand = st.armed ? c.throttle : 0;
     st.motor += (demand - st.motor) * (1 - Math.exp(-dt / CFG.thrustSpool));
 
+    // Battery: draw sags the pack, and a sagging pack gives less thrust.
+    var B = CFG.battery;
+    st.mah += (0.8 + st.motor * st.motor * 26) * dt;
+    var depth = clamp(st.mah / B.capacity, 0, 1);
+    var rest = B.full - depth * (B.full - B.empty);
+    st.volts = (rest - st.motor * B.sag * 0.22) * B.cells;
+    var thrustScale = clamp(0.68 + 0.32 * ((rest - 3.4) / (B.full - 3.4)), 0.45, 1);
+
     _up.set(0, 1, 0).applyQuaternion(st.quat);
-    var acc = _up.clone().multiplyScalar(st.motor * CFG.maxThrust);
+    var acc = _v.copy(_up).multiplyScalar(st.motor * CFG.maxThrust * thrustScale);
     acc.y -= CFG.gravity;
 
-    // --- drag: linear + quadratic, isotropic ---
-    var speed = st.vel.length();
-    if (speed > 1e-5) {
-      var dragMag = CFG.dragLinear + CFG.dragQuad * speed;
-      acc.addScaledVector(st.vel, -dragMag);
+    // Wind, with a slow gust cycle. Indoors both are zero.
+    var w = mapSpec.wind;
+    if (w.x || w.z || w.gust) {
+      windPhase += dt * 0.37;
+      var gust = 1 + Math.sin(windPhase) * 0.5 + Math.sin(windPhase * 2.3) * 0.3;
+      var alt = clamp(st.pos.y / 12, 0.25, 1.4);
+      acc.x += (w.x * gust + Math.sin(windPhase * 1.7) * w.gust) * alt * 0.55;
+      acc.z += (w.z * gust + Math.cos(windPhase * 1.3) * w.gust) * alt * 0.55;
     }
+
+    var speed = st.vel.length();
+    if (speed > 1e-5) acc.addScaledVector(st.vel, -(CFG.dragLinear + CFG.dragQuad * speed));
 
     st.vel.addScaledVector(acc, dt);
     st.pos.addScaledVector(st.vel, dt);
 
     collide(dt);
-    checkGates();
+    if (Run.state === 'live' || Run.state === 'countdown') st.flightTime += dt;
   }
 
   function crash(impact) {
     st.crashes++;
+    Sound.crash(impact);
     if (impact > CFG.crashSpeed && st.armed) {
       st.armed = false;
-      updateStatusChrome();
-      toast('CRASHED — DISARMED', '#ff5b5b');
+      Sound.disarm();
+      toast('CRASHED', '#ff4d4d');
+      Run.onCrash(impact);
+    } else if (impact > 3) {
+      Run.onCrash(impact);
     }
   }
 
@@ -959,19 +1716,33 @@ function start() {
         st.vel.y = -st.vel.y * CFG.bounce;
         if (Math.abs(st.vel.y) < 0.4) st.vel.y = 0;
       }
-      // Ground friction + settle attitude when parked.
       st.vel.x *= CFG.friction;
       st.vel.z *= CFG.friction;
       if (!st.armed) {
         st.omega.multiplyScalar(0.85);
-        var flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yawOf(st.quat), 0));
-        st.quat.slerp(flat, Math.min(1, dt * 4));
+        _dq.setFromEuler(new THREE.Euler(0, yawOf(st.quat), 0));
+        st.quat.slerp(_dq, Math.min(1, dt * 4));
       }
+      Run.onGround();
     }
 
-    // Pylons (vertical cylinders)
-    for (var i = 0; i < pylons.length; i++) {
-      var p = pylons[i];
+    // Ceiling and walls (indoor maps)
+    if (mapSpec.ceiling && st.pos.y > mapSpec.ceiling) {
+      st.pos.y = mapSpec.ceiling;
+      if (st.vel.y > 0) { crash(st.vel.y); st.vel.y *= -CFG.bounce; }
+    }
+    if (mapSpec.bounds) {
+      ['x', 'z'].forEach(function (axis) {
+        var lim = mapSpec.bounds[axis];
+        if (st.pos[axis] > lim) { st.pos[axis] = lim; if (st.vel[axis] > 0) { crash(st.vel[axis]); st.vel[axis] *= -CFG.bounce; } }
+        else if (st.pos[axis] < -lim) { st.pos[axis] = -lim; if (st.vel[axis] < 0) { crash(-st.vel[axis]); st.vel[axis] *= -CFG.bounce; } }
+      });
+    }
+
+    // Obstacles
+    var ob = mapSpec.pylons;
+    for (var i = 0; i < ob.length; i++) {
+      var p = ob[i];
       if (st.pos.y > p.h + 0.2) continue;
       var dx = st.pos.x - p.x, dz = st.pos.z - p.z;
       var d = Math.hypot(dx, dz);
@@ -988,349 +1759,991 @@ function start() {
         }
       }
     }
+
+    checkGates();
   }
 
   var _rel = new THREE.Vector3();
   function checkGates() {
+    var gates = mapSpec.gates;
     for (var i = 0; i < gates.length; i++) {
       var g = gates[i];
       _rel.copy(st.pos).sub(g.centre);
       var side = _rel.dot(g.normal);
       var radial = Math.sqrt(Math.max(0, _rel.lengthSq() - side * side));
 
-      // Clipping the ring itself counts as a hit.
       if (Math.abs(side) < 0.4 && Math.abs(radial - g.radius) < 0.4) {
         crash(st.vel.length());
-        var push = _rel.clone().addScaledVector(g.normal, -side);
+        var push = _v.copy(_rel).addScaledVector(g.normal, -side);
         if (push.lengthSq() > 1e-6) {
           push.normalize().multiplyScalar(radial > g.radius ? 0.35 : -0.35);
           st.pos.add(push);
           st.vel.multiplyScalar(0.4);
         }
       }
-
-      if (g.prevSide !== 0 && radial < g.radius - 0.25) {
-        // Crossing the gate plane in the course direction.
-        if (g.prevSide < 0 && side >= 0 && i === race.next) passGate(i);
-      }
+      if (g.prevSide !== 0 && radial < g.radius - 0.25 && g.prevSide < 0 && side >= 0) Run.onGate(i);
       g.prevSide = side < 0 ? -1 : 1;
     }
   }
 
-  function passGate(i) {
-    var now = performance.now();
-    if (i === 0) {
-      if (race.started && race.lapStart !== null) {
-        race.lastLap = (now - race.lapStart) / 1000;
-        race.lap++;
-        if (race.best === null || race.lastLap < race.best) {
-          race.best = race.lastLap;
-          toast('LAP ' + race.lap + '  ' + fmt(race.lastLap) + '  BEST!', '#7dff8a');
-        } else {
-          toast('LAP ' + race.lap + '  ' + fmt(race.lastLap), '#6ef2c0');
-        }
-      } else {
-        toast('GO!', '#7dff8a');
+  /* ================= RUN / SCENARIOS ================= */
+  var Run = {
+    scenario: SCENARIOS[1], map: MAPS[0],
+    state: 'menu',            // menu | countdown | live | done
+    t: 0, countdown: 0,
+    gateIndex: 0, lap: 0, lapStart: null, lastLap: null, bestLap: null,
+    splits: [], bestSplits: null, delta: null,
+    score: 0, timeLeft: 0,
+    rec: { round: 0, stable: 0, alt: 0 },
+    result: null, banner: null,
+
+    begin: function (scenario, map) {
+      this.scenario = scenario;
+      this.map = map;
+      if (!mapSpec || mapSpec.id !== map.id) {
+        clearWorld();
+        mapSpec = BUILDERS[map.id]();
+        mapSpec.id = map.id;
       }
-      race.started = true;
-      race.lapStart = now;
-    } else {
-      toast('GATE ' + (i + 1), '#6ef2c0');
+      Store.data.map = map.id;
+      Store.data.scenario = scenario.id;
+      Store.save();
+      this.restart();
+    },
+
+    restart: function () {
+      var s = this.scenario;
+      this.t = 0;
+      this.gateIndex = 0;
+      this.lap = 0;
+      this.lapStart = null;
+      this.lastLap = null;
+      this.bestLap = null;
+      this.splits = [];
+      this.delta = null;
+      this.score = 0;
+      this.result = null;
+      this.banner = null;
+      this.rec.round = 0;
+      this.rec.stable = 0;
+      st.flightTime = 0;
+      st.crashes = 0;
+      resetBattery();
+      // Start every run at idle. A gamepad re-reads its physical stick on the
+      // next frame; the keyboard's virtual throttle has to be put down by hand.
+      Input._thr = 0;
+      Input.ctl.throttle = 0;
+      mapSpec.gates.forEach(function (g) { g.prevSide = 0; });
+
+      camMode = s.camera;
+      applyFov();
+
+      if (s.id === 'recover') {
+        this.state = 'live';
+        st.armed = true;
+        this.spawnTumble();
+      } else if (s.id === 'free') {
+        this.state = 'live';
+        placeAtSpawn();
+        st.armed = false;
+      } else {
+        this.state = 'countdown';
+        this.countdown = 3.999;
+        placeAtSpawn();
+        st.armed = false;
+        this.timeLeft = s.seconds || 0;
+      }
+      Sound.startFlight();
+      hud.pulse = 0;
+    },
+
+    // Recovery drill: thrown into the air inverted and spinning, harder each round.
+    spawnTumble: function () {
+      var r = this.rec.round;
+      var alt = Math.max(16, 52 - r * 3.5);
+      this.rec.alt = alt;
+      this.rec.stable = 0;
+      st.pos.set(mapSpec.spawn.x + (Math.random() - 0.5) * 14, alt, mapSpec.spawn.z + (Math.random() - 0.5) * 14);
+      st.vel.set((Math.random() - 0.5) * 6, -2 - Math.random() * 3, (Math.random() - 0.5) * 6);
+      st.quat.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      // A real tumble about a random axis — per-axis noise can cancel out and
+      // hand you a gentle spawn that teaches nothing.
+      var spin = (3.4 + r * 1.2) * (0.85 + Math.random() * 0.3);
+      var axis = new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) * 0.5, Math.random() - 0.5);
+      if (axis.lengthSq() < 1e-6) axis.set(0, 0, 1);
+      st.omega.copy(axis.normalize()).multiplyScalar(spin);
+      st.motor = 0;
+      st.armed = true;
+      chaseInit = false;
+      toast('ROUND ' + (r + 1), '#ffb020');
+    },
+
+    update: function (dt) {
+      if (this.state === 'countdown') {
+        var was = Math.ceil(this.countdown);
+        this.countdown -= dt;
+        var now = Math.ceil(this.countdown);
+        if (now !== was && now >= 0) Sound.count(now === 0);
+        if (this.countdown <= 0) {
+          this.state = 'live';
+          this.t = 0;
+          st.armed = true;
+          Sound.arm();
+          toast('GO', '#7dffb0');
+        }
+        return;
+      }
+      if (this.state !== 'live') return;
+      this.t += dt;
+
+      if (this.scenario.id === 'rush') {
+        this.timeLeft -= dt;
+        if (this.timeLeft <= 4 && Math.floor(this.timeLeft) !== Math.floor(this.timeLeft + dt)) Sound.warn();
+        if (this.timeLeft <= 0) {
+          this.timeLeft = 0;
+          this.finish('TIME', this.score + ' gate' + (this.score === 1 ? '' : 's'), this.score, false);
+        }
+      }
+
+      if (this.scenario.id === 'recover') {
+        _up.set(0, 1, 0).applyQuaternion(st.quat);
+        var level = _up.y > 0.88;
+        var slow = st.omega.length() < 0.7;
+        var sink = st.vel.y > -3.5;
+        var high = st.pos.y > 4;
+        if (level && slow && sink && high) {
+          this.rec.stable += dt;
+          if (this.rec.stable >= 1.2) {
+            this.rec.round++;
+            Sound.win();
+            toast('RECOVERED', '#7dffb0');
+            this.spawnTumble();
+          }
+        } else {
+          this.rec.stable = 0;
+        }
+      }
+
+      // Flat battery is the end of the flight, whatever the mode.
+      if (st.volts / CFG.battery.cells < 3.3) {
+        st.armed = false;
+        this.finish('PACK EMPTY', 'Flight time ' + fmtTime(st.flightTime), null, false);
+      }
+    },
+
+    onGate: function (i) {
+      if (this.state !== 'live') return;
+      var s = this.scenario;
+      if (s.id === 'free') { if (i === this.gateIndex) { Sound.gate(); this.gateIndex = (i + 1) % mapSpec.gates.length; } return; }
+      if (s.id === 'recover') return;
+      if (i !== this.gateIndex) return;
+
+      Sound.gate();
+      hud.pulse = 1;
+
+      if (s.id === 'rush') {
+        this.score++;
+        this.timeLeft += s.bonus;
+        toast('+' + s.bonus + 'S', '#7dffb0');
+        // Next target is any gate but this one — keeps you moving.
+        var n = mapSpec.gates.length;
+        var next = (i + 1 + ((Math.random() * (n - 1)) | 0)) % n;
+        this.gateIndex = next;
+        return;
+      }
+
+      // Time trial / LOS: sequential gates, laps, splits.
+      var laps = s.laps || 2;
+      this.splits.push(this.t);
+      if (this.lapStart === null) this.lapStart = this.t;
+      var n2 = mapSpec.gates.length;
+      this.gateIndex = (i + 1) % n2;
+
+      if (this.gateIndex === 0) {
+        var lapTime = this.t - this.lapStart;
+        this.lapStart = this.t;
+        this.lastLap = lapTime;
+        if (this.bestLap === null || lapTime < this.bestLap) this.bestLap = lapTime;
+        this.lap++;
+        if (this.lap >= laps) {
+          this.finish('FINISH', 'Total ' + fmtTime(this.t) + '  ·  Best lap ' + fmtTime(this.bestLap), this.bestLap, true);
+        } else {
+          toast('LAP ' + this.lap + '  ' + fmtTime(lapTime), '#ffb020');
+        }
+      }
+    },
+
+    onCrash: function () {
+      if (this.state !== 'live') return;
+      if (this.scenario.id === 'recover') {
+        this.finish('DOWN', 'Recovered ' + this.rec.round + ' round' + (this.rec.round === 1 ? '' : 's'), this.rec.round, false);
+      }
+    },
+
+    onGround: function () {
+      if (this.state === 'live' && this.scenario.id === 'recover' && this.rec.round >= 0 && st.pos.y <= CFG.groundY + 0.01) {
+        this.finish('DOWN', 'Recovered ' + this.rec.round + ' round' + (this.rec.round === 1 ? '' : 's'), this.rec.round, false);
+      }
+    },
+
+    finish: function (title, sub, value, lowerBetter) {
+      if (this.state === 'done') return;
+      this.state = 'done';
+      st.armed = false;
+      var best = false;
+      if (value !== null && value !== undefined) {
+        best = Store.setRecord(this.map.id, this.scenario.id, value, lowerBetter);
+      }
+      this.result = { title: title, sub: sub, best: best };
+      if (best) Sound.win(); else Sound.fail();
+      toast(title, title === 'FINISH' ? '#7dffb0' : '#ffb020');
+    },
+
+    // Objective line shown across the top of the OSD.
+    objective: function () {
+      var s = this.scenario;
+      if (this.state === 'done') return null;
+      if (s.id === 'race' || s.id === 'los') return 'LAP ' + Math.min(this.lap + 1, s.laps || 2) + '/' + (s.laps || 2) + '   GATE ' + (this.gateIndex + 1) + '/' + mapSpec.gates.length;
+      if (s.id === 'rush') return 'GATES ' + this.score + '   ' + this.timeLeft.toFixed(1) + 'S LEFT';
+      if (s.id === 'recover') {
+        if (this.state !== 'live') return null;
+        return 'ROUND ' + (this.rec.round + 1) + '   ' + (this.rec.stable > 0 ? 'HOLD ' + (1.2 - this.rec.stable).toFixed(1) : 'RECOVER');
+      }
+      return null;
     }
-    race.next = (i + 1) % gates.length;
+  };
+
+  /* ================= CAMERA ================= */
+  var camMode = 'fpv';
+  var camTilt = CFG.camTilt;
+  var showArms = Store.data.arms !== false;
+  var chasePos = new THREE.Vector3(), chaseInit = false;
+  var losQuat = new THREE.Quaternion(), losInit = false;
+
+  function applyFov() {
+    camera.fov = camMode === 'fpv' ? CFG.fpvFov : camMode === 'los' ? CFG.losFov : CFG.chaseFov;
+    camera.updateProjectionMatrix();
   }
 
-  function fmt(s) {
-    if (s === null || s === undefined) return '--.--';
-    return s.toFixed(2) + 's';
+  function cycleCamera() {
+    camMode = camMode === 'fpv' ? 'chase' : camMode === 'chase' ? 'los' : 'fpv';
+    applyFov();
+    chaseInit = losInit = false;
+    toast(camMode === 'fpv' ? 'FPV' : camMode === 'chase' ? 'CHASE' : 'LINE OF SIGHT', '#f2ece2');
   }
 
-  function yawOf(q) {
-    _fwd.set(0, 0, -1).applyQuaternion(q);
-    return Math.atan2(-_fwd.x, -_fwd.z);
-  }
-
-  /* ---------------- camera ---------------- */
   function updateCamera(dt) {
-    if (camMode === 'FPV') {
-      // Rigidly attached, slight uptilt — what the pilot actually sees.
-      var off = new THREE.Vector3(0, 0.075, -0.28).applyQuaternion(st.quat);
+    if (camMode === 'fpv') {
+      // Sat where the real camera sits: on the stack, tilted up. With prop
+      // view on it sits far enough back that the front arms are in frame.
+      var off = _v.set(0, 0.105, showArms ? -0.10 : -0.34).applyQuaternion(st.quat);
       camera.position.copy(st.pos).add(off);
       camera.quaternion.copy(st.quat);
       camera.rotateX(camTilt);
+      parts.pod.visible = false;
+      parts.lens.visible = false;
+      drone.visible = showArms;
     } else {
-      // Chase cam: fixed behind/above the airframe, yaw-following, smoothed.
-      var back = new THREE.Vector3(0, 0.55, 2.4).applyQuaternion(
-        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yawOf(st.quat), 0))
-      );
-      var want = st.pos.clone().add(back);
-      if (want.y < 0.5) want.y = 0.5;
-      if (!chaseInit) { chasePos.copy(want); chaseInit = true; }
-      chasePos.lerp(want, 1 - Math.exp(-dt / 0.09));
-      camera.position.copy(chasePos);
-      var look = st.pos.clone().addScaledVector(st.vel, 0.07);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(look);
+      parts.pod.visible = true;
+      parts.lens.visible = true;
+      drone.visible = true;
+      if (camMode === 'chase') {
+        _dq.setFromEuler(new THREE.Euler(0, yawOf(st.quat), 0));
+        var back = _v.set(0, 0.55, 2.5).applyQuaternion(_dq);
+        var want = back.add(st.pos);
+        if (want.y < 0.5) want.y = 0.5;
+        if (!chaseInit) { chasePos.copy(want); chaseInit = true; }
+        chasePos.lerp(want, 1 - Math.exp(-dt / 0.09));
+        camera.position.copy(chasePos);
+        camera.up.set(0, 1, 0);
+        camera.lookAt(_v.copy(st.pos).addScaledVector(st.vel, 0.07));
+      } else {
+        // Line of sight: you stand still, only your head turns.
+        camera.position.copy(mapSpec.pilot);
+        camera.up.set(0, 1, 0);
+        var m = new THREE.Matrix4().lookAt(camera.position, st.pos, camera.up);
+        var target = new THREE.Quaternion().setFromRotationMatrix(m);
+        if (!losInit) { losQuat.copy(target); losInit = true; }
+        losQuat.slerp(target, 1 - Math.exp(-dt / 0.13));
+        camera.quaternion.copy(losQuat);
+      }
     }
     sky.position.copy(camera.position);
   }
 
-  /* ---------------- HUD drawing ---------------- */
-  function drawHud() {
+  /* ================= OSD ================= */
+  var hudCanvas = document.getElementById('hud');
+  var hx = hudCanvas.getContext('2d');
+  var MONO = "'IBM Plex Mono', ui-monospace, monospace";
+  var DISPLAY = "'Saira Condensed', 'Arial Narrow', sans-serif";
+  var hud = { pulse: 0, restartArm: 0, blink: 0 };
+
+  function T(text, x, y, o) {
+    o = o || {};
+    hx.font = (o.weight || 500) + ' ' + (o.size || 12) + 'px ' + (o.font || MONO);
+    hx.textAlign = o.align || 'left';
+    hx.textBaseline = o.base || 'alphabetic';
+    hx.shadowColor = 'rgba(0,0,0,0.95)';
+    hx.shadowBlur = o.glow || 4;
+    hx.shadowOffsetY = 1;
+    hx.fillStyle = o.color || '#eef2ee';
+    hx.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
+    hx.fillText(text, x, y);
+    hx.globalAlpha = 1;
+    hx.shadowBlur = 0;
+    hx.shadowOffsetY = 0;
+  }
+  function line(x1, y1, x2, y2, color, width, alpha) {
+    hx.strokeStyle = color || '#eef2ee';
+    hx.lineWidth = width || 1.5;
+    hx.globalAlpha = alpha === undefined ? 1 : alpha;
+    hx.shadowColor = 'rgba(0,0,0,0.9)';
+    hx.shadowBlur = 3;
+    hx.beginPath(); hx.moveTo(x1, y1); hx.lineTo(x2, y2); hx.stroke();
+    hx.shadowBlur = 0;
+    hx.globalAlpha = 1;
+  }
+
+  function drawOSD(dt) {
     var w = window.innerWidth, h = window.innerHeight;
     hx.clearRect(0, 0, w, h);
+    if (!mapSpec) return;
+    hud.blink += dt;
+    hud.pulse = Math.max(0, hud.pulse - dt * 2.2);
+
+    var m = Math.max(18, Math.min(w, h) * 0.035);
+    var cx = w / 2, cy = h / 2;
+    var fpv = camMode === 'fpv';
 
     _fwd.set(0, 0, -1).applyQuaternion(st.quat);
     _up.set(0, 1, 0).applyQuaternion(st.quat);
     _right.set(1, 0, 0).applyQuaternion(st.quat);
-
     var pitch = Math.asin(clamp(_fwd.y, -1, 1));
     var roll = Math.atan2(-_right.y, _up.y);
     var inverted = _up.y < 0;
+    var speed = st.vel.length();
 
-    // Horizon shifts with camera uptilt in FPV, matching the rendered view.
-    var shownPitch = pitch + (camMode === 'FPV' ? camTilt : 0);
+    /* --- analog video character: vignette, then scanlines --- */
+    if (fpv) {
+      var vg = hx.createRadialGradient(cx, cy, Math.min(w, h) * 0.32, cx, cy, Math.max(w, h) * 0.72);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,0.42)');
+      hx.fillStyle = vg;
+      hx.fillRect(0, 0, w, h);
+      hx.globalAlpha = 0.035;
+      hx.fillStyle = '#000';
+      for (var sl = 0; sl < h; sl += 3) hx.fillRect(0, sl, w, 1);
+      hx.globalAlpha = 1;
+    }
+
+    /* --- attitude: full ladder in FPV, an instrument otherwise --- */
     var vfov = camera.fov * Math.PI / 180;
-    var ppr = h / vfov;
-
-    var col = 'rgba(110,242,192,0.92)';
-    var cx = w / 2, cy = h / 2;
-
-    // In FPV the ladder is a full-screen overlay locked to the camera. In chase
-    // the camera is level, so the same overlay would fight the rendered horizon —
-    // draw a bezelled attitude instrument instead.
-    var fpv = camMode === 'FPV';
+    var shownPitch = pitch + (fpv ? camTilt : 0);
     var inst = fpv
-      ? { cx: cx, cy: cy, ppr: ppr, half: Math.min(w, h) * 0.42, arcR: Math.min(w, h) * 0.30, clip: 0 }
-      : (function () {
-          var r = Math.min(96, Math.min(w, h) * 0.17);
-          return { cx: cx, cy: h - r - 62, ppr: r / (50 * Math.PI / 180), half: r * 0.92, arcR: r, clip: r };
-        })();
+      ? { cx: cx, cy: cy, ppr: h / vfov, half: Math.min(w, h) * 0.40, arcR: Math.min(w, h) * 0.29, clip: 0 }
+      : (function () { var r = Math.min(92, Math.min(w, h) * 0.16); return { cx: cx, cy: h - r - m - 30, ppr: r / (50 * Math.PI / 180), half: r * 0.9, arcR: r, clip: r }; })();
 
     hx.save();
     if (inst.clip) {
-      hx.beginPath();
-      hx.arc(inst.cx, inst.cy, inst.clip, 0, Math.PI * 2);
-      hx.fillStyle = 'rgba(6,14,18,0.45)';
-      hx.fill();
-      hx.clip();
+      hx.beginPath(); hx.arc(inst.cx, inst.cy, inst.clip, 0, Math.PI * 2);
+      hx.fillStyle = 'rgba(8,10,12,0.4)'; hx.fill(); hx.clip();
     }
     hx.translate(inst.cx, inst.cy);
     hx.rotate(-roll);
-    hx.translate(0, shownPitch * inst.ppr);
-    hx.lineWidth = 2;
-    hx.strokeStyle = inverted ? 'rgba(255,120,120,0.92)' : col;
-    hx.fillStyle = hx.strokeStyle;
-    hx.font = '11px ' + HUD_FONT;
-    hx.textBaseline = 'middle';
+    var attCol = inverted ? '#ff7878' : 'rgba(238,242,238,0.95)';
 
-    // Horizon bar with a centre gap.
-    var half = inst.half;
-    hx.beginPath();
-    hx.moveTo(-half, 0); hx.lineTo(-half * 0.22, 0);
-    hx.moveTo(half * 0.22, 0); hx.lineTo(half, 0);
-    hx.stroke();
-
-    // Pitch ladder every 10 degrees.
-    hx.lineWidth = 1.5;
-    for (var deg = -60; deg <= 60; deg += 10) {
-      if (deg === 0) continue;
-      var y = -deg * Math.PI / 180 * inst.ppr;
-      if (Math.abs(y) > (inst.clip || h * 0.75)) continue;
-      var lw = deg % 30 === 0 ? half * 0.30 : half * 0.18;
-      hx.globalAlpha = 0.75;
-      if (deg < 0) hx.setLineDash([7, 6]);
-      hx.beginPath();
-      hx.moveTo(-lw, y); hx.lineTo(-lw * 0.35, y);
-      hx.moveTo(lw * 0.35, y); hx.lineTo(lw, y);
-      hx.stroke();
-      hx.setLineDash([]);
+    // FPV overlays the real lens, so rungs go where perspective puts them.
+    // The instrument is a synthetic gauge and stays linear.
+    var focal = (h / 2) / Math.tan(vfov / 2);
+    var limit = inst.clip || h * 0.62;
+    function rungY(degrees) {
+      var a = shownPitch - degrees * Math.PI / 180;
       if (fpv) {
-        hx.textAlign = 'right';
-        hx.fillText(String(deg), -lw - 6, y);
-        hx.textAlign = 'left';
-        hx.fillText(String(deg), lw + 6, y);
+        if (Math.abs(a) > 1.45) return null;
+        var y = focal * Math.tan(a);
+        return Math.abs(y) > h * 1.2 ? null : y;
       }
-      hx.globalAlpha = 1;
+      var yl = a * inst.ppr;
+      return Math.abs(yl) > limit ? null : yl;
+    }
+
+    var hy = rungY(0);
+    if (hy !== null) {
+      line(-inst.half, hy, -inst.half * 0.2, hy, attCol, 2);
+      line(inst.half * 0.2, hy, inst.half, hy, attCol, 2);
+    }
+    for (var deg = -60; deg <= 60; deg += 10) {
+      if (!deg) continue;
+      var ly = rungY(deg);
+      if (ly === null) continue;
+      var lw = deg % 30 === 0 ? inst.half * 0.28 : inst.half * 0.15;
+      hx.setLineDash(deg < 0 ? [6, 5] : []);
+      line(-lw, ly, -lw * 0.34, ly, attCol, 1.4, 0.7);
+      line(lw * 0.34, ly, lw, ly, attCol, 1.4, 0.7);
+      hx.setLineDash([]);
+      if (fpv && deg % 30 === 0) {
+        T(String(deg), -lw - 6, ly + 4, { size: 10, align: 'right', color: attCol, alpha: 0.7 });
+        T(String(deg), lw + 6, ly + 4, { size: 10, color: attCol, alpha: 0.7 });
+      }
     }
     hx.restore();
 
     if (inst.clip) {
-      hx.strokeStyle = 'rgba(110,242,192,0.5)';
-      hx.lineWidth = 1;
-      hx.beginPath();
-      hx.arc(inst.cx, inst.cy, inst.clip, 0, Math.PI * 2);
-      hx.stroke();
+      hx.strokeStyle = 'rgba(238,242,238,0.35)'; hx.lineWidth = 1;
+      hx.beginPath(); hx.arc(inst.cx, inst.cy, inst.clip, 0, Math.PI * 2); hx.stroke();
     }
 
-    // Fixed aircraft symbol at the instrument centre.
-    hx.strokeStyle = 'rgba(255,255,255,0.9)';
-    hx.lineWidth = 2;
-    hx.beginPath();
-    hx.moveTo(inst.cx - 22, inst.cy); hx.lineTo(inst.cx - 8, inst.cy);
-    hx.moveTo(inst.cx + 8, inst.cy); hx.lineTo(inst.cx + 22, inst.cy);
-    hx.moveTo(inst.cx, inst.cy - 5); hx.lineTo(inst.cx, inst.cy + 5);
-    hx.stroke();
+    // Aircraft symbol
+    line(inst.cx - 24, inst.cy, inst.cx - 9, inst.cy, '#ffffff', 2);
+    line(inst.cx + 9, inst.cy, inst.cx + 24, inst.cy, '#ffffff', 2);
+    line(inst.cx, inst.cy - 5, inst.cx, inst.cy + 5, '#ffffff', 2);
 
-    // Roll arc + pointer.
-    hx.strokeStyle = col;
-    hx.lineWidth = 1.5;
-    var arcR = inst.arcR;
-    hx.beginPath();
-    hx.arc(inst.cx, inst.cy, arcR, -Math.PI * 0.72, -Math.PI * 0.28);
-    hx.stroke();
+    // Roll pointer on a short arc
+    hx.strokeStyle = 'rgba(238,242,238,0.5)'; hx.lineWidth = 1.2;
+    hx.beginPath(); hx.arc(inst.cx, inst.cy, inst.arcR, -Math.PI * 0.70, -Math.PI * 0.30); hx.stroke();
     [-60, -30, 0, 30, 60].forEach(function (d) {
       var a = -Math.PI / 2 + d * Math.PI / 180;
-      var len = d === 0 ? 10 : 6;
-      hx.beginPath();
-      hx.moveTo(inst.cx + Math.cos(a) * arcR, inst.cy + Math.sin(a) * arcR);
-      hx.lineTo(inst.cx + Math.cos(a) * (arcR + len), inst.cy + Math.sin(a) * (arcR + len));
-      hx.stroke();
+      var len = d === 0 ? 9 : 5;
+      line(inst.cx + Math.cos(a) * inst.arcR, inst.cy + Math.sin(a) * inst.arcR,
+           inst.cx + Math.cos(a) * (inst.arcR + len), inst.cy + Math.sin(a) * (inst.arcR + len), 'rgba(238,242,238,0.5)', 1.2);
     });
     var ra = -Math.PI / 2 + roll;
-    hx.fillStyle = inverted ? '#ff7878' : col;
+    hx.fillStyle = inverted ? '#ff7878' : '#eef2ee';
     hx.beginPath();
-    hx.moveTo(inst.cx + Math.cos(ra) * (arcR - 3), inst.cy + Math.sin(ra) * (arcR - 3));
-    hx.lineTo(inst.cx + Math.cos(ra - 0.035) * (arcR - 13), inst.cy + Math.sin(ra - 0.035) * (arcR - 13));
-    hx.lineTo(inst.cx + Math.cos(ra + 0.035) * (arcR - 13), inst.cy + Math.sin(ra + 0.035) * (arcR - 13));
-    hx.closePath();
-    hx.fill();
+    hx.moveTo(inst.cx + Math.cos(ra) * (inst.arcR - 3), inst.cy + Math.sin(ra) * (inst.arcR - 3));
+    hx.lineTo(inst.cx + Math.cos(ra - 0.035) * (inst.arcR - 12), inst.cy + Math.sin(ra - 0.035) * (inst.arcR - 12));
+    hx.lineTo(inst.cx + Math.cos(ra + 0.035) * (inst.arcR - 12), inst.cy + Math.sin(ra + 0.035) * (inst.arcR - 12));
+    hx.closePath(); hx.fill();
 
-    // Throttle bar (left edge).
-    var bx = 26, by = h / 2 - 90, bh = 180, bw = 12;
-    hx.strokeStyle = 'rgba(110,242,192,0.5)';
-    hx.lineWidth = 1;
+    /* --- corner telemetry --- */
+    var primaryLabel = 'ELAPSED', primaryValue = fmtTime(Run.t);
+    if (Run.scenario.id === 'rush') { primaryLabel = 'TIME LEFT'; primaryValue = Run.timeLeft.toFixed(1); }
+    else if (Run.scenario.id === 'recover') { primaryLabel = 'ALTITUDE'; primaryValue = st.pos.y.toFixed(1) + 'm'; }
+    else if (Run.scenario.id === 'free') { primaryLabel = 'FLIGHT'; primaryValue = fmtTime(st.flightTime); }
+    T(primaryLabel, m, m + 2, { size: 10, color: 'rgba(238,242,238,0.55)' });
+    T(primaryValue, m - 2, m + 32, { size: 30, weight: 700, font: DISPLAY,
+      color: Run.scenario.id === 'rush' && Run.timeLeft < 6 ? '#ff4d4d' : '#eef2ee' });
+
+    if (Run.lastLap !== null) T('LAST ' + fmtTime(Run.lastLap), m, m + 52, { size: 11, color: 'rgba(238,242,238,0.7)' });
+    if (Run.bestLap !== null) T('BEST ' + fmtTime(Run.bestLap), m, m + 68, { size: 11, color: '#ffb020' });
+    if (Run.scenario.id === 'recover' && Run.rec.round > 0) T('ROUNDS ' + Run.rec.round, m, m + 52, { size: 11, color: '#ffb020' });
+
+    var obj = Run.objective();
+    if (obj) T(obj, cx, m + 16, { size: 13, align: 'center', weight: 600, color: '#eef2ee' });
+
+    // Battery + device, top right
+    var cellV = st.volts / CFG.battery.cells;
+    var battCol = cellV < 3.5 ? '#ff4d4d' : cellV < 3.7 ? '#ffb020' : '#eef2ee';
+    T(st.volts.toFixed(1) + 'V', w - m, m + 14, { size: 19, align: 'right', weight: 600, color: battCol });
+    var bw = 76, bh = 4, bx = w - m - bw, by = m + 22;
+    hx.strokeStyle = 'rgba(238,242,238,0.4)'; hx.lineWidth = 1;
     hx.strokeRect(bx, by, bw, bh);
+    var pct = clamp((cellV - 3.4) / (CFG.battery.full - 3.4), 0, 1);
+    hx.fillStyle = battCol;
+    hx.fillRect(bx + 1, by + 1, (bw - 2) * pct, bh - 2);
+    T((Input.active === 'gamepad' ? 'PAD' : 'KBD') + ' · ' + Input.profile.name.toUpperCase() + ' · ' +
+      (camMode === 'fpv' ? 'FPV' : camMode === 'chase' ? 'CHASE' : 'LOS'),
+      w - m, m + 42, { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
+
+    // Throttle, bottom left
+    var tbH = Math.min(150, h * 0.26), tbW = 9;
+    var tbX = m, tbY = h - m - tbH - 20;
+    hx.strokeStyle = 'rgba(238,242,238,0.45)'; hx.lineWidth = 1;
+    hx.strokeRect(tbX, tbY, tbW, tbH);
     var thr = Input.ctl.throttle;
-    hx.fillStyle = st.armed ? 'rgba(110,242,192,0.85)' : 'rgba(110,242,192,0.35)';
-    hx.fillRect(bx + 1, by + bh - bh * thr + 1, bw - 2, bh * thr - 2);
-    // Actual spooled motor output as a tick.
-    hx.strokeStyle = '#ffc042';
-    hx.beginPath();
-    hx.moveTo(bx - 4, by + bh - bh * st.motor);
-    hx.lineTo(bx + bw + 4, by + bh - bh * st.motor);
-    hx.stroke();
-    hx.fillStyle = 'rgba(110,242,192,0.92)';
-    hx.font = '11px ' + HUD_FONT;
-    hx.textAlign = 'center';
-    hx.fillText('THR', bx + bw / 2, by - 10);
-    hx.fillText(Math.round(thr * 100) + '%', bx + bw / 2, by + bh + 16);
+    hx.fillStyle = st.armed ? 'rgba(238,242,238,0.9)' : 'rgba(238,242,238,0.35)';
+    hx.fillRect(tbX + 1, tbY + tbH - tbH * thr, tbW - 2, tbH * thr);
+    line(tbX - 3, tbY + tbH - tbH * st.motor, tbX + tbW + 3, tbY + tbH - tbH * st.motor, '#ffb020', 1.5);
+    T('THR', tbX, tbY - 8, { size: 10, color: 'rgba(238,242,238,0.55)' });
+    T(Math.round(thr * 100) + '%', tbX, h - m - 4, { size: 13, weight: 600 });
 
-    // Altitude + speed tape labels (right edge).
-    hx.textAlign = 'right';
-    hx.fillText('ALT ' + st.pos.y.toFixed(1) + 'm', w - 26, h / 2 - 8);
-    hx.fillText('SPD ' + st.vel.length().toFixed(1) + 'm/s', w - 26, h / 2 + 10);
+    // Speed / altitude, bottom right
+    T(speed.toFixed(1), w - m, h - m - 22, { size: 22, align: 'right', weight: 700, font: DISPLAY });
+    T('M/S', w - m, h - m - 6, { size: 10, align: 'right', color: 'rgba(238,242,238,0.55)' });
+    T('ALT ' + st.pos.y.toFixed(1) + 'M', w - m - 76, h - m - 6, { size: 11, align: 'right', color: 'rgba(238,242,238,0.75)' });
 
-    // Next-gate director: distance + off-screen arrow.
-    var g = gates[race.next];
-    var toGate = g.centre.clone().sub(st.pos);
-    var dist = toGate.length();
-    var proj = g.centre.clone().project(camera);
-    var onScreen = proj.z < 1 && Math.abs(proj.x) < 1 && Math.abs(proj.y) < 1;
-    var gx = cx + proj.x * w / 2, gy = cy - proj.y * h / 2;
-
-    hx.strokeStyle = '#ffc042';
-    hx.fillStyle = '#ffc042';
-    hx.lineWidth = 2;
-    if (onScreen) {
-      var rr = clamp(600 / Math.max(dist, 1), 14, 90);
-      hx.globalAlpha = 0.9;
-      hx.beginPath();
-      hx.arc(gx, gy, rr, 0, Math.PI * 2);
-      hx.setLineDash([6, 8]);
-      hx.stroke();
-      hx.setLineDash([]);
-      hx.globalAlpha = 1;
-      hx.textAlign = 'center';
-      hx.fillText(Math.round(dist) + 'm', gx, gy + rr + 14);
-    } else {
-      var ang = Math.atan2(gy - cy, gx - cx);
-      if (proj.z > 1) ang += Math.PI;
-      var dirR = Math.min(w, h) * 0.30;
-      var ax2 = cx + Math.cos(ang) * dirR * 0.78;
-      var ay2 = cy + Math.sin(ang) * dirR * 0.78;
-      hx.save();
-      hx.translate(ax2, ay2);
-      hx.rotate(ang);
-      hx.beginPath();
-      hx.moveTo(14, 0); hx.lineTo(-8, -8); hx.lineTo(-8, 8);
-      hx.closePath();
-      hx.fill();
-      hx.restore();
-      hx.textAlign = 'center';
-      hx.fillText(Math.round(dist) + 'm', ax2, ay2 + 24);
+    // Arm state, bottom centre
+    if (!st.armed && Run.state !== 'done') {
+      var blink = Math.sin(hud.blink * 5) > -0.3;
+      if (blink) T('DISARMED', cx, h - m - 6, { size: 13, align: 'center', weight: 600, color: '#ff4d4d' });
+    } else if (st.armed) {
+      T('ARMED', cx, h - m - 6, { size: 12, align: 'center', weight: 600, color: 'rgba(255,77,77,0.85)' });
     }
 
-    // Big warning band when disarmed.
-    if (!st.armed) {
-      hx.textAlign = 'center';
-      hx.fillStyle = 'rgba(255,91,91,0.9)';
-      hx.font = 'bold 14px ' + HUD_FONT;
-      hx.fillText('DISARMED — PRESS ' + (Input.active === 'gamepad' ? '✕ / A' : 'SPACE') + ' TO ARM', cx, h - 34);
+    /* --- next gate director --- */
+    if (Run.scenario.id !== 'recover' && Run.state !== 'done' && mapSpec.gates.length) {
+      var g = mapSpec.gates[Run.gateIndex];
+      var dist = g.centre.distanceTo(st.pos);
+      var proj = g.centre.clone().project(camera);
+      var onScreen = proj.z < 1 && Math.abs(proj.x) < 1 && Math.abs(proj.y) < 1;
+      var gx = cx + proj.x * w / 2, gy = cy - proj.y * h / 2;
+      var col = '#ffb020';
+      if (onScreen) {
+        var r = clamp(620 / Math.max(dist, 1), 16, 120) * (1 + hud.pulse * 0.25);
+        var k = r * 0.42;
+        [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) {
+          line(gx + q[0] * r, gy + q[1] * r, gx + q[0] * (r - k), gy + q[1] * r, col, 2, 0.9);
+          line(gx + q[0] * r, gy + q[1] * r, gx + q[0] * r, gy + q[1] * (r - k), col, 2, 0.9);
+        });
+        T(Math.round(dist) + 'M', gx, gy + r + 15, { size: 11, align: 'center', color: col });
+      } else {
+        var ang = Math.atan2(gy - cy, gx - cx);
+        if (proj.z > 1) ang += Math.PI;
+        var dr = Math.min(w, h) * 0.30;
+        var ax = cx + Math.cos(ang) * dr, ay = cy + Math.sin(ang) * dr;
+        hx.save();
+        hx.translate(ax, ay); hx.rotate(ang);
+        hx.fillStyle = col;
+        hx.beginPath(); hx.moveTo(13, 0); hx.lineTo(-7, -7); hx.lineTo(-7, 7); hx.closePath(); hx.fill();
+        hx.restore();
+        T(Math.round(dist) + 'M', ax, ay + 24, { size: 11, align: 'center', color: col });
+      }
+    }
+
+    /* --- countdown / result --- */
+    if (Run.state === 'countdown') {
+      var n = Math.ceil(Run.countdown);
+      T(n > 0 ? String(n) : 'GO', cx, cy + 26, { size: 92, align: 'center', weight: 700, font: DISPLAY, color: n > 0 ? '#eef2ee' : '#7dffb0', glow: 18 });
+    }
+    if (Run.state === 'done' && Run.result) {
+      T(Run.result.title, cx, cy - 14, { size: 62, align: 'center', weight: 700, font: DISPLAY, glow: 16,
+        color: Run.result.best ? '#7dffb0' : '#eef2ee' });
+      T(Run.result.sub, cx, cy + 16, { size: 14, align: 'center', color: 'rgba(238,242,238,0.85)' });
+      if (Run.result.best) T('NEW RECORD', cx, cy + 40, { size: 12, align: 'center', weight: 600, color: '#7dffb0' });
+      var restartKey = Input.active === 'gamepad' ? 'SHARE ×2' : 'BACKSPACE ×2';
+      var pauseKey = Input.active === 'gamepad' ? 'OPTIONS' : 'ESC';
+      T(restartKey + ' RESTART   ·   ' + pauseKey + ' MENU', cx, cy + 66, { size: 12, align: 'center', color: 'rgba(238,242,238,0.6)' });
+    }
+    if (hud.restartArm > 0) {
+      hud.restartArm -= dt;
+      T('PRESS AGAIN TO RESTART', cx, h - m - 28, { size: 12, align: 'center', weight: 600, color: '#ffb020' });
     }
   }
 
-  /* ---------------- main loop ---------------- */
+  /* ================= TOAST + HINT ================= */
+  var toastEl = document.getElementById('toast'), toastTimer = null;
+  function toast(text, color) {
+    toastEl.textContent = text;
+    toastEl.style.color = color || '#f2ece2';
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1300);
+  }
+
+  var hintEl = document.getElementById('hint');
+  var hintTimer = null, hintOn = true;
+  function renderHint() {
+    if (!hintOn) { hintEl.classList.add('gone'); return; }
+    hintEl.innerHTML = Input.bindings('flight').map(function (b) {
+      return '<span><b>' + b[0] + '</b>' + b[1] + '</span>';
+    }).join('');
+    hintEl.classList.remove('gone');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function () { hintEl.classList.add('gone'); }, 12000);
+  }
+  function toggleHint() {
+    hintOn = !hintOn;
+    if (hintOn) renderHint(); else hintEl.classList.add('gone');
+  }
+
+  /* ================= MENU ================= */
+  var menuEl = document.getElementById('menu');
+  var pauseEl = document.getElementById('pause');
+
+  var SETUP = [
+    { label: 'Rates', value: function () { return Input.profile.name + ' · ' + Input.profile.rate.roll + '°/s'; },
+      cycle: function () {
+        var i = RATE_PROFILES.indexOf(Input.profile);
+        Input.profile = RATE_PROFILES[(i + 1) % RATE_PROFILES.length];
+        Store.data.rates = Input.profile.id; Store.save();
+      } },
+    { label: 'Prop in view', value: function () { return showArms ? 'On' : 'Off'; },
+      cycle: function () { showArms = !showArms; Store.data.arms = showArms; Store.save(); } },
+    { label: 'Throttle', value: function () { return Input.throttleMode === 'absolute' ? 'Stick position' : 'Ramped'; },
+      cycle: function () { Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute'; } },
+    { label: 'Sound', value: function () { return Store.data.sound ? 'On' : 'Off'; },
+      cycle: function () { Store.data.sound = !Store.data.sound; Store.save(); Sound.setVolume(); } },
+    { label: 'Volume', value: function () { return Math.round(Store.data.volume * 100) + '%'; },
+      cycle: function () {
+        Store.data.volume = Math.round((Store.data.volume + 0.2) * 10) / 10;
+        if (Store.data.volume > 1.001) Store.data.volume = 0;
+        Store.save(); Sound.setVolume();
+      } }
+  ];
+
+  var Menu = {
+    col: 0,
+    idx: [0, 0, 0],
+    els: [[], [], []],
+
+    build: function () {
+      var self = this;
+      var cols = [
+        { el: document.getElementById('col-mode'), items: SCENARIOS },
+        { el: document.getElementById('col-map'), items: MAPS }
+      ];
+      cols.forEach(function (c, ci) {
+        c.items.forEach(function (item, ii) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'opt';
+          b.innerHTML = '<span class="code">' + item.code + '</span>' +
+                        '<span class="name">' + item.name + '</span>' +
+                        '<span class="sub">' + item.desc + '</span>';
+          b.addEventListener('click', function () { self.col = ci; self.idx[ci] = ii; Sound.move(); self.render(); });
+          b.addEventListener('dblclick', function () { self.launch(); });
+          c.el.appendChild(b);
+          self.els[ci].push(b);
+        });
+      });
+      var setupCol = document.getElementById('col-setup');
+      SETUP.forEach(function (row, ri) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'setrow';
+        b.innerHTML = '<span class="l">' + row.label + '</span><span class="v"></span>';
+        b.addEventListener('click', function () {
+          self.col = 2; self.idx[2] = ri;
+          row.cycle(); Sound.select(); self.render();
+        });
+        setupCol.appendChild(b);
+        self.els[2].push(b);
+      });
+
+      document.getElementById('startbtn').addEventListener('click', function () { self.launch(); });
+
+      // Restore the last session's choices.
+      var si = SCENARIOS.findIndex ? SCENARIOS.findIndex(function (s) { return s.id === Store.data.scenario; }) : -1;
+      var mi = MAPS.findIndex ? MAPS.findIndex(function (s) { return s.id === Store.data.map; }) : -1;
+      this.idx[0] = si >= 0 ? si : 1;
+      this.idx[1] = mi >= 0 ? mi : 0;
+      var rp = RATE_PROFILES.filter(function (p) { return p.id === Store.data.rates; })[0];
+      if (rp) Input.profile = rp;
+    },
+
+    scenario: function () { return SCENARIOS[this.idx[0]]; },
+    mapSel: function () { return MAPS[this.idx[1]]; },
+
+    render: function () {
+      var self = this;
+      [0, 1, 2].forEach(function (ci) {
+        self.els[ci].forEach(function (el, ii) {
+          el.setAttribute('aria-selected', ii === self.idx[ci] ? 'true' : 'false');
+        });
+      });
+      ['col-mode', 'col-map', 'col-setup'].forEach(function (id, ci) {
+        document.getElementById(id).classList.toggle('focused', ci === self.col);
+      });
+      SETUP.forEach(function (row, ri) { self.els[2][ri].querySelector('.v').textContent = row.value(); });
+
+      var sc = this.scenario(), mp = this.mapSel();
+      document.getElementById('briefdesc').innerHTML =
+        '<b>' + sc.name + '</b> — ' + sc.desc + '<br><b>' + mp.name + '</b> — ' + mp.desc;
+      document.getElementById('m-rates').textContent = Input.profile.name.toUpperCase();
+
+      var rec = Store.record(mp.id, sc.id);
+      var label = sc.id === 'rush' ? 'MOST GATES' : sc.id === 'recover' ? 'BEST ROUNDS' : sc.id === 'free' ? '' : 'BEST LAP';
+      var box = document.getElementById('briefrecord');
+      if (!label) box.innerHTML = '';
+      else box.innerHTML = label + '<span class="t">' +
+        (rec === undefined ? '—' : (sc.id === 'rush' || sc.id === 'recover' ? rec : fmtTime(rec))) + '</span>';
+
+      document.getElementById('menubinds').innerHTML = Input.bindings('menu').map(function (b) {
+        return '<span><b>' + b[0] + '</b>' + b[1] + '</span>';
+      }).join('');
+      var dev = document.getElementById('devbadge');
+      dev.classList.toggle('pad', Input.active === 'gamepad');
+      dev.querySelector('b').textContent = Input.active === 'gamepad'
+        ? (Input.padName ? Input.padName.replace(/\s*\(.*\)\s*/, '').slice(0, 26) || 'Gamepad' : 'Gamepad')
+        : 'Keyboard';
+      document.getElementById('gokey').textContent = Input.active === 'gamepad' ? '✕' : 'Enter';
+    },
+
+    move: function (dx, dy) {
+      if (dx) {
+        this.col = clamp(this.col + dx, 0, 2);
+      } else if (dy) {
+        var n = this.els[this.col].length;
+        this.idx[this.col] = (this.idx[this.col] + dy + n) % n;
+      }
+      Sound.move();
+      this.render();
+    },
+
+    activate: function () {
+      if (this.col === 2) { SETUP[this.idx[2]].cycle(); Sound.select(); this.render(); }
+      else this.launch();
+    },
+
+    launch: function () {
+      Sound.unlock();
+      Sound.select();
+      menuEl.hidden = true;
+      Run.begin(this.scenario(), this.mapSel());
+      renderHint();
+    },
+
+    show: function () {
+      menuEl.hidden = false;
+      pauseEl.hidden = true;
+      Run.state = 'menu';
+      Sound.stopFlight();
+      this.render();
+    }
+  };
+
+  /* ================= PAUSE ================= */
+  var PAUSE_ROWS = [
+    { label: 'Resume', value: null, act: function () { Pause.close(); } },
+    { label: 'Restart run', value: null, act: function () { Pause.close(); Run.restart(); } },
+    { label: 'Rates', value: function () { return Input.profile.name; }, act: function () {
+        var i = RATE_PROFILES.indexOf(Input.profile);
+        Input.profile = RATE_PROFILES[(i + 1) % RATE_PROFILES.length];
+        Store.data.rates = Input.profile.id; Store.save(); Pause.render();
+      } },
+    { label: 'Prop in view', value: function () { return showArms ? 'On' : 'Off'; }, act: function () {
+        showArms = !showArms; Store.data.arms = showArms; Store.save(); Pause.render();
+      } },
+    { label: 'Camera', value: function () { return camMode === 'fpv' ? 'FPV' : camMode === 'chase' ? 'Chase' : 'Line of sight'; },
+      act: function () { cycleCamera(); Pause.render(); } },
+    { label: 'Sound', value: function () { return Store.data.sound ? 'On' : 'Off'; }, act: function () {
+        Store.data.sound = !Store.data.sound; Store.save(); Sound.setVolume(); Pause.render();
+      } },
+    { label: 'Quit to menu', value: null, act: function () { pauseEl.hidden = true; Menu.show(); } }
+  ];
+
+  var Pause = {
+    idx: 0, els: [],
+    build: function () {
+      var list = document.getElementById('pauselist'), self = this;
+      PAUSE_ROWS.forEach(function (row, i) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = row.value ? 'setrow' : 'opt';
+        b.innerHTML = row.value
+          ? '<span class="l">' + row.label + '</span><span class="v"></span>'
+          : '<span class="code"></span><span class="name">' + row.label + '</span>';
+        b.addEventListener('click', function () { self.idx = i; row.act(); Sound.select(); self.render(); });
+        list.appendChild(b);
+        self.els.push(b);
+      });
+    },
+    render: function () {
+      var self = this;
+      PAUSE_ROWS.forEach(function (row, i) {
+        self.els[i].setAttribute('aria-selected', i === self.idx ? 'true' : 'false');
+        if (row.value) self.els[i].querySelector('.v').textContent = row.value();
+      });
+      document.getElementById('pausesub').textContent =
+        Run.scenario.name + ' · ' + Run.map.name + ' · ' + Input.profile.name + ' rates';
+      document.getElementById('pausebinds').innerHTML = Input.bindings('pause').map(function (b) {
+        return '<span><b>' + b[0] + '</b>' + b[1] + '</span>';
+      }).join('');
+    },
+    open: function () {
+      if (Run.state === 'menu') return;
+      pauseEl.hidden = false;
+      Sound.stopFlight();
+      this.render();
+    },
+    close: function () {
+      pauseEl.hidden = true;
+      if (Run.state !== 'menu') Sound.startFlight();
+    },
+    move: function (d) {
+      this.idx = (this.idx + d + PAUSE_ROWS.length) % PAUSE_ROWS.length;
+      Sound.move();
+      this.render();
+    },
+    activate: function () { PAUSE_ROWS[this.idx].act(); Sound.select(); if (!pauseEl.hidden) this.render(); }
+  };
+
+  function inMenu() { return !menuEl.hidden || !pauseEl.hidden; }
+
+  /* ================= INPUT HOOKS ================= */
+  Input.init({
+    screenKey: function (code) {
+      if (!pauseEl.hidden) {
+        if (code === 'ArrowUp' || code === 'KeyW') { Pause.move(-1); return true; }
+        if (code === 'ArrowDown' || code === 'KeyS') { Pause.move(1); return true; }
+        if (code === 'Enter' || code === 'Space') { Pause.activate(); return true; }
+        if (code === 'Escape' || code === 'KeyP') { Pause.close(); return true; }
+        return true;
+      }
+      if (!menuEl.hidden) {
+        if (code === 'ArrowUp' || code === 'KeyW') { Menu.move(0, -1); return true; }
+        if (code === 'ArrowDown' || code === 'KeyS') { Menu.move(0, 1); return true; }
+        if (code === 'ArrowLeft' || code === 'KeyA') { Menu.move(-1, 0); return true; }
+        if (code === 'ArrowRight' || code === 'KeyD') { Menu.move(1, 0); return true; }
+        if (code === 'Enter' || code === 'Space') { Menu.activate(); return true; }
+        return true;
+      }
+      return false;
+    },
+    arm: function () {
+      if (Run.state === 'countdown') return;
+      if (!st.armed) {
+        if (Input.ctl.throttle > 0.12) { toast('LOWER THROTTLE TO ARM', '#ffb020'); Sound.warn(); return; }
+        st.armed = true; Sound.arm(); toast('ARMED', '#ff4d4d');
+      } else {
+        st.armed = false; Sound.disarm(); toast('DISARMED', '#f2ece2');
+      }
+    },
+    resetDrone: function () {
+      if (Run.scenario.id === 'recover' && Run.state === 'live') { Run.spawnTumble(); return; }
+      placeAtSpawn();
+      toast('RESET', '#f2ece2');
+    },
+    camera: cycleCamera,
+    arms: function () {
+      showArms = !showArms;
+      Store.data.arms = showArms; Store.save();
+      toast('PROP VIEW ' + (showArms ? 'ON' : 'OFF'), '#f2ece2');
+    },
+    throttleMode: function () {
+      Input.throttleMode = Input.throttleMode === 'absolute' ? 'ramped' : 'absolute';
+      toast('THROTTLE: ' + (Input.throttleMode === 'absolute' ? 'STICK POSITION' : 'RAMPED'), '#f2ece2');
+    },
+    hint: toggleHint,
+    mute: function () {
+      Store.data.sound = !Store.data.sound; Store.save(); Sound.setVolume();
+      toast(Store.data.sound ? 'SOUND ON' : 'SOUND OFF', '#f2ece2');
+    },
+    tilt: function (dir) {
+      camTilt = clamp(camTilt + dir * 3 * Math.PI / 180, 0, 55 * Math.PI / 180);
+      parts.pod.rotation.x = camTilt;
+      parts.lens.rotation.x = Math.PI / 2 + camTilt;
+      toast('CAM TILT ' + Math.round(camTilt * 180 / Math.PI) + '°', '#f2ece2');
+    },
+    restart: function (confirmed) {
+      if (inMenu() || Run.state === 'menu') return;
+      if (confirmed) { hud.restartArm = 0; Run.restart(); toast('RESTART', '#ffb020'); }
+      else { hud.restartArm = 2.2; Sound.warn(); }
+    },
+    pause: function () {
+      if (Run.state === 'menu') return;
+      if (pauseEl.hidden) Pause.open(); else Pause.close();
+    },
+    deviceChanged: function () {
+      renderHint();
+      if (!menuEl.hidden) Menu.render();
+      if (!pauseEl.hidden) Pause.render();
+    },
+    isArmed: function () { return st.armed; }
+  });
+
+  /* ================= RESIZE ================= */
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    hudCanvas.width = Math.floor(w * dpr);
+    hudCanvas.height = Math.floor(h * dpr);
+    hx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* ================= LOOP ================= */
   var last = performance.now();
-  var lastArmed = st.armed;
-  var accumulator = 0;
-  var FIXED = 1 / 240;   // fixed physics step keeps the feel frame-rate independent
+  var acc = 0;
+  var FIXED = 1 / 240;
+  var propSpin = 0;
 
   function frame(now) {
     requestAnimationFrame(frame);
     var dt = Math.min((now - last) / 1000, 0.1);
     last = now;
 
-    Input.update(dt);
+    var menuing = inMenu();
+    Input.update(dt, menuing);
 
-    // One-shot gamepad button edges.
-    if (Input.edges.arm) toggleArm();
-    if (Input.edges.reset) resetDrone(false);
-    if (Input.edges.camera) toggleCamera();
-    if (Input.edges.restart) restartRace();
-
-    accumulator += dt;
-    var steps = 0;
-    while (accumulator >= FIXED && steps < 64) {
-      stepPhysics(FIXED);
-      accumulator -= FIXED;
-      steps++;
+    if (menuing) {
+      var n = Input.nav;
+      if (!pauseEl.hidden) {
+        if (n.up) Pause.move(-1);
+        if (n.down) Pause.move(1);
+        if (n.select) Pause.activate();
+        if (n.back || Input.edges.pause) Pause.close();
+      } else {
+        if (n.up) Menu.move(0, -1);
+        if (n.down) Menu.move(0, 1);
+        if (n.left) Menu.move(-1, 0);
+        if (n.right) Menu.move(1, 0);
+        if (n.select) Menu.activate();
+      }
+      hx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      return;
     }
-    if (steps === 64) accumulator = 0;
+
+    if (Input.edges.arm) Input.hooks.arm();
+    if (Input.edges.resetDrone) Input.hooks.resetDrone();
+    if (Input.edges.camera) cycleCamera();
+    if (Input.edges.arms) Input.hooks.arms();
+    if (Input.edges.pause) Pause.open();
+
+    if (!mapSpec) return;
+
+    acc += dt;
+    var steps = 0;
+    while (acc >= FIXED && steps < 64) { stepPhysics(FIXED); acc -= FIXED; steps++; }
+    if (steps === 64) acc = 0;
+    Run.update(dt);
 
     drone.position.copy(st.pos);
     drone.quaternion.copy(st.quat);
 
-    var spin = (0.6 + st.motor * 5.5) * (st.armed ? 1 : 0);
-    props.forEach(function (p) { p.mesh.rotation.y += p.dir * spin * dt * 60; });
-
-    gates.forEach(function (g, i) {
-      g.glow.material.color.setHex(i === race.next ? 0xffc042 : 0x39506e);
+    // Props: blades below ~40% spool, a blur disc above it.
+    var rpm = st.armed ? 0.35 + st.motor * 6.2 : 0;
+    propSpin += rpm * dt * 9;
+    var discOpacity = clamp((rpm - 1.2) / 3.2, 0, 1) * 0.2;
+    parts.props.forEach(function (p, i) {
+      p.hub.rotation.y = propSpin * p.dir;
+      p.blades.opacity = clamp(1 - discOpacity * 2.4, 0.08, 0.95);
+      parts.discs[i].material.opacity = discOpacity;
     });
 
-    if (st.armed !== lastArmed) { lastArmed = st.armed; updateStatusChrome(); }
+    // Lights: nav lights always, strobes and beacon at night.
+    var night = !!mapSpec.night;
+    parts.nose.material.color.setHex(st.armed ? 0x4dff8a : 0x224433);
+    parts.tail.material.color.setHex(st.armed ? 0xff3b3b : 0x441a1a);
+    var strobeOn = night && st.armed && (hud.blink % 1.1) < 0.08;
+    parts.strobes.forEach(function (s) { s.material.color.setHex(strobeOn ? 0xffffff : 0x202020); });
+    parts.beacon.intensity = night && st.armed ? (Math.sin(hud.blink * 3) * 0.5 + 0.5) * 1.6 : 0;
+
+    // Gate lighting: the next gate is the bright one.
+    mapSpec.gates.forEach(function (g, i) {
+      var isNext = i === Run.gateIndex && Run.scenario.id !== 'recover';
+      if (g.style === 'neon') {
+        g.glowMat.color.setHex(isNext ? 0xffffff : g.neon);
+        if (isNext && mapSpec.gateLight) {
+          mapSpec.gateLight.position.copy(g.centre);
+          mapSpec.gateLight.color.setHex(g.neon);
+        }
+      } else {
+        g.glowMat.color.setHex(isNext ? 0xffb020 : 0x39506e);
+      }
+    });
 
     updateCamera(dt);
+    Sound.flight(st.motor, Math.min(st.omega.length() / 8, 1), st.vel.length(), st.armed);
+
     renderer.render(scene, camera);
-    drawHud();
-
-    // Text panels
-    ui.thr.textContent = Math.round(Input.ctl.throttle * 100) + '%';
-    ui.spd.textContent = st.vel.length().toFixed(1) + ' m/s';
-    ui.alt.textContent = st.pos.y.toFixed(1) + ' m';
-    ui.cam.textContent = camMode;
-    ui.gateinfo.textContent = (race.next + 1) + ' / ' + gates.length;
-    ui.laptime.textContent = race.lapStart !== null && race.started
-      ? fmt((performance.now() - race.lapStart) / 1000)
-      : fmt(race.lastLap);
-    ui.besttime.textContent = fmt(race.best);
-
-    // Keep the pad label fresh if a controller appears without an event
-    // (Chrome only fires gamepadconnected after the first button press).
-    if (Input.padIndex !== null && Input.active === 'keyboard' &&
-        ui.padname.textContent.indexOf('No gamepad') === 0) inputChanged();
+    drawOSD(dt);
   }
+
+  /* ================= BOOT ================= */
+  Menu.build();
+  Pause.build();
+  Menu.render();
+  document.getElementById('boot').hidden = true;
+  menuEl.hidden = false;
   requestAnimationFrame(frame);
+
+  window.__sim = { st: st, Run: Run, Menu: Menu, Pause: Pause, Input: Input, cfg: CFG,
+    spec: function () { return mapSpec; }, cam: function () { return camMode; }, Sound: Sound };
 }
 </script>
 </body>

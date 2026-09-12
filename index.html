@@ -71,6 +71,80 @@
   #hint span { margin-right: 16px; white-space: nowrap; }
   #hint.gone { opacity: 0; }
 
+  /* ---- touch controls ---- */
+  #touch { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
+  #touch[hidden] { display: none !important; }
+  #touch .pad {
+    position: absolute;
+    bottom: max(14px, env(safe-area-inset-bottom, 0px));
+    width: min(34vw, 168px);
+    height: min(34vw, 168px);
+    pointer-events: auto;
+    touch-action: none;
+    border-radius: 50%;
+  }
+  #touch #padL { left: max(14px, env(safe-area-inset-left, 0px)); }
+  #touch #padR { right: max(14px, env(safe-area-inset-right, 0px)); }
+  #touch .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(238, 242, 238, 0.30);
+    background: rgba(8, 10, 12, 0.28);
+  }
+  #touch .pad i {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 34%; height: 34%;
+    margin: -17% 0 0 -17%;
+    border-radius: 50%;
+    background: rgba(238, 242, 238, 0.32);
+    border: 1px solid rgba(238, 242, 238, 0.55);
+    transition: background 0.15s;
+  }
+  #touch .pad.on i { background: rgba(255, 92, 22, 0.55); border-color: var(--flag); }
+  #touch .pad em {
+    position: absolute;
+    left: 0; right: 0; top: -18px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-style: normal;
+    letter-spacing: 0.16em;
+    color: rgba(238, 242, 238, 0.5);
+  }
+  /* The throttle pad is a slider, not a self-centring stick: a mark shows
+     where the throttle is sitting when your thumb is off it. */
+  #touch #padL .ring::after {
+    content: '';
+    position: absolute;
+    left: 8%; right: 8%;
+    top: var(--thr, 50%);
+    height: 2px;
+    background: rgba(255, 176, 32, 0.85);
+  }
+  #touch .tbtns {
+    position: absolute;
+    left: 50%;
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+  }
+  #touch .tbtn {
+    width: 54px; height: 42px;
+    border: 1px solid rgba(238, 242, 238, 0.35);
+    background: rgba(8, 10, 12, 0.55);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    touch-action: manipulation;
+  }
+  #touch .tbtn:active { background: rgba(255, 92, 22, 0.35); }
+  #touch .tbtn.armed { color: var(--alert); border-color: var(--alert); }
+
   #toast {
     position: fixed;
     left: 50%;
@@ -514,6 +588,7 @@
   }
   .device .dot { width: 7px; height: 7px; background: var(--live); box-shadow: 0 0 8px var(--live); }
   .device.pad .dot { background: #64b5ff; box-shadow: 0 0 8px #64b5ff; }
+  .device.touch .dot { background: #ffb020; box-shadow: 0 0 8px #ffb020; }
   .device b { color: var(--ink); font-weight: 600; }
 
   .go {
@@ -601,6 +676,17 @@
 <canvas id="hud"></canvas>
 
 <div id="hint"></div>
+
+<!-- on-screen sticks: only shown once a touch actually happens -->
+<div id="touch" hidden>
+  <div class="pad" id="padL"><span class="ring"></span><i></i><em>THR / YAW</em></div>
+  <div class="pad" id="padR"><span class="ring"></span><i></i><em>PITCH / ROLL</em></div>
+  <div class="tbtns">
+    <button type="button" class="tbtn" id="tArm">ARM</button>
+    <button type="button" class="tbtn" id="tReset">RST</button>
+    <button type="button" class="tbtn" id="tPause">☰</button>
+  </div>
+</div>
 <div id="toast"></div>
 
 <!-- ============================ main menu ============================ -->
@@ -749,6 +835,60 @@ var QUAD = {
  * response they buy, because that is the auditable quantity: a well-tuned
  * 5" quad reaches a commanded roll rate in roughly 50 ms, pitch a little
  * slower, yaw two to three times slower again. */
+/* ================================================================== *
+ * AIRFRAMES
+ * Each one is a complete set of the constants the model already runs on,
+ * so swapping aircraft is data, not code. Figures are the usual published
+ * ones for each class — bench thrust per motor, all-up weight, pack, prop
+ * diameter — and everything else (inertia, drag area, prop damping) is
+ * scaled from those by the same relations the 5" was derived with.
+ * ================================================================== */
+var AIRFRAMES = [
+  { id: 'five', name: '5″ Freestyle', code: 'A1', modelScale: 1.00, groundY: 0.13, camTilt: 22, ducted: false,
+    desc: 'The default racing and freestyle quad. 650 g, 4S, 6.5:1 thrust. Everything else here is measured against it.',
+    quad: { massKg: 0.650, thrustPerMotorN: 10.30, thrustRefV: 16.8, thrustExp: 1.5, motorIdle: 0.055,
+      spoolUpTau: 0.022, spoolDownTau: 0.030, armM: 0.0778, propTorqueArm: 0.0100, propRadiusM: 0.0635,
+      pitchSpeedMax: 45.0, inducedVelHover: 7.2, Iroll: 0.0032, Ipitch: 0.0040, Iyaw: 0.0062,
+      cdaLateral: 0.012, cdaAxial: 0.055, cdaLong: 0.014,
+      rotDampBody: 0.00150, rotDampProp: 0.00600, propwashTorque: 0.035 },
+    fc: { roll: 0.022, pitch: 0.026, yaw: 0.045 },
+    battery: { cells: 4, full: 4.20, empty: 3.40, capacity: 1300, rPack: 0.016, maxAmps: 105, idleAmps: 0.9, currentExp: 1.8 } },
+
+  { id: 'whoop', name: 'Tinywhoop', code: 'A2', modelScale: 0.26, groundY: 0.022, camTilt: 25, ducted: true,
+    desc: '65 mm ducted, 35 g, 2S. Almost no inertia, so it stops the instant you ask — and almost no speed either. Bounces off walls.',
+    quad: { massKg: 0.035, thrustPerMotorN: 0.300, thrustRefV: 8.4, thrustExp: 1.5, motorIdle: 0.070,
+      spoolUpTau: 0.012, spoolDownTau: 0.018, armM: 0.0230, propTorqueArm: 0.0024, propRadiusM: 0.0155,
+      pitchSpeedMax: 14.0, inducedVelHover: 5.0, Iroll: 0.0000150, Ipitch: 0.0000180, Iyaw: 0.0000280,
+      cdaLateral: 0.0025, cdaAxial: 0.0050, cdaLong: 0.0022,
+      rotDampBody: 0.0000050, rotDampProp: 0.0000450, propwashTorque: 0.0004 },
+    fc: { roll: 0.014, pitch: 0.016, yaw: 0.030 },
+    battery: { cells: 2, full: 4.20, empty: 3.40, capacity: 450, rPack: 0.090, maxAmps: 14, idleAmps: 0.25, currentExp: 1.8 } },
+
+  { id: 'cine', name: 'Cinewhoop', code: 'A3', modelScale: 0.62, groundY: 0.09, camTilt: 12, ducted: true,
+    desc: '3″ ducted, 550 g, 4S. Heavy and draggy on purpose: it flies smooth lines and refuses to be twitchy.',
+    quad: { massKg: 0.550, thrustPerMotorN: 5.90, thrustRefV: 16.8, thrustExp: 1.5, motorIdle: 0.060,
+      spoolUpTau: 0.026, spoolDownTau: 0.034, armM: 0.0550, propTorqueArm: 0.0060, propRadiusM: 0.0380,
+      pitchSpeedMax: 26.0, inducedVelHover: 6.5, Iroll: 0.00135, Ipitch: 0.00165, Iyaw: 0.00260,
+      cdaLateral: 0.016, cdaAxial: 0.029, cdaLong: 0.014,
+      rotDampBody: 0.00250, rotDampProp: 0.00270, propwashTorque: 0.020 },
+    fc: { roll: 0.030, pitch: 0.034, yaw: 0.050 },
+    battery: { cells: 4, full: 4.20, empty: 3.40, capacity: 1100, rPack: 0.022, maxAmps: 60, idleAmps: 0.8, currentExp: 1.8 } },
+
+  { id: 'seven', name: '7″ Long range', code: 'A4', modelScale: 1.42, groundY: 0.17, camTilt: 20, ducted: false,
+    desc: '1.15 kg on 6S. Carries its momentum into every corner and takes a moment to answer — but it will fly for ten minutes.',
+    quad: { massKg: 1.150, thrustPerMotorN: 13.70, thrustRefV: 25.2, thrustExp: 1.5, motorIdle: 0.050,
+      spoolUpTau: 0.035, spoolDownTau: 0.045, armM: 0.1050, propTorqueArm: 0.0140, propRadiusM: 0.0890,
+      pitchSpeedMax: 52.0, inducedVelHover: 8.5, Iroll: 0.0103, Ipitch: 0.0125, Iyaw: 0.0190,
+      cdaLateral: 0.024, cdaAxial: 0.109, cdaLong: 0.028,
+      rotDampBody: 0.00400, rotDampProp: 0.01160, propwashTorque: 0.060 },
+    fc: { roll: 0.035, pitch: 0.040, yaw: 0.060 },
+    battery: { cells: 6, full: 4.20, empty: 3.40, capacity: 3000, rPack: 0.012, maxAmps: 90, idleAmps: 1.2, currentExp: 1.8 } }
+];
+function airframeById(id) {
+  for (var i = 0; i < AIRFRAMES.length; i++) if (AIRFRAMES[i].id === id) return AIRFRAMES[i];
+  return AIRFRAMES[0];
+}
+
 var FC = {
   tau: { roll: 0.022, pitch: 0.026, yaw: 0.045 },  // s   closed-loop rate time constants
   dTime: 0.015,               // s   D/P ratio expressed as a time
@@ -930,7 +1070,7 @@ var SCENARIOS = [
  * ================================================================== */
 var Store = {
   key: 'acrofpv.v2',
-  data: { rates: 'sport', idleMode: 'airmode', flightMode: 'acro', invertPitch: false, gfx: 'high', map: 'field', scenario: 'race', arms: true, volume: 0.7, sound: true, records: {} },
+  data: { rates: 'sport', idleMode: 'airmode', flightMode: 'acro', airframe: 'five', invertPitch: false, gfx: 'high', map: 'field', scenario: 'race', arms: true, volume: 0.7, sound: true, records: {} },
   load: function () {
     try {
       var raw = localStorage.getItem(this.key);
@@ -942,7 +1082,25 @@ var Store = {
     return this.data;
   },
   save: function () {
-    try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) {}
+    try {
+      localStorage.setItem(this.key, JSON.stringify(this.data));
+      return true;
+    } catch (e) {
+      // Ghost laps are by far the biggest thing in here and the most
+      // expendable. Drop them rather than lose settings and records.
+      this.data.ghosts = {};
+      try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e2) {}
+      return false;
+    }
+  },
+  // Keep a handful of ghosts, newest first; a lap is ~100 KB of samples.
+  pruneGhosts: function (keep) {
+    var g = this.data.ghosts;
+    if (!g) return;
+    var keys = Object.keys(g);
+    if (keys.length <= keep) return;
+    keys.sort(function (a, b) { return (g[b].savedAt || 0) - (g[a].savedAt || 0); });
+    for (var i = keep; i < keys.length; i++) delete g[keys[i]];
   },
   record: function (map, scenario) {
     return this.data.records[map + '.' + scenario];
@@ -1210,6 +1368,7 @@ var Input = {
   setActive: function (mode) {
     if (this.active === mode) return;
     this.active = mode;
+    if (mode === 'touch' && Touch.enabled) Touch.thr = this._thr;
     if (this.hooks) {
       if (this.hooks.isArmed && !this.hooks.isArmed()) { this._thr = 0; this.ctl.throttle = 0; }
       this.hooks.deviceChanged();
@@ -1330,6 +1489,18 @@ var Input = {
       }
     }
 
+    // ---- touch ----
+    if (this.active === 'touch') {
+      // Raw stick positions: expo lives in the flight controller, applied
+      // once by bfRate, exactly as it is for the other two devices.
+      this.ctl.yaw = Touch.yaw;
+      this.ctl.roll = Touch.roll;
+      this.ctl.pitch = this.invertPitch ? -Touch.pitch : Touch.pitch;
+      this.ctl.throttle = this._thr = Touch.thr;
+      this.ctl.climb = Touch.climb;
+      return;
+    }
+
     // ---- keyboard ----
     // Keyboard menu navigation is handled directly in the keydown hook.
     var k = this.keys;
@@ -1359,6 +1530,10 @@ var Input = {
 
   // Bindings for the on-screen hints — only ever the active device's.
   bindings: function (context) {
+    if (this.active === 'touch') {
+      if (context === 'menu' || context === 'pause') return [['Tap', 'Choose'], ['Tap again', 'Confirm']];
+      return [['Left pad', 'Throttle / yaw'], ['Right pad', 'Pitch / roll'], ['ARM', 'Arm'], ['☰', 'Pause']];
+    }
     var padMode = this.active === 'gamepad';
     if (context === 'menu') {
       return padMode
@@ -1383,6 +1558,128 @@ var Input = {
              ['Q E', 'Yaw'], ['Shift Ctrl', hold ? 'Up / down' : 'Throttle'],
              ['Space', 'Arm'], ['R', 'Reset'], ['F', 'Flight mode'], ['N', 'Rates']];
     return k.concat(hold ? [['[ ]', 'Gimbal tilt']] : []).concat([['C', 'View'], ['Esc', 'Pause']]);
+  }
+};
+
+/* ================================================================== *
+ * TOUCH — on-screen sticks, so the thing is usable on a phone
+ * The right pad is a self-centring gimbal. The left pad is NOT: its vertical
+ * axis is an absolute throttle that stays where you lift your thumb off,
+ * because a spring-centred throttle is the one thing no transmitter has.
+ * In Camera mode it does spring back, because there the stick is a climb
+ * command about its centre.
+ * ================================================================== */
+var Touch = {
+  enabled: false,
+  thr: 0, yaw: 0, pitch: 0, roll: 0, climb: 0,
+  idL: null, idR: null,
+
+  init: function (hooks) {
+    var self = this;
+    this.hooks = hooks;
+    this.root = document.getElementById('touch');
+    this.padL = document.getElementById('padL');
+    this.padR = document.getElementById('padR');
+
+    // Only appear once someone actually touches the screen: a laptop with a
+    // touchscreen should not get thumb sticks over its view.
+    window.addEventListener('touchstart', function () { self.enable(); }, { passive: true, once: true });
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) this.enable();
+
+    this.bindPad(this.padL, 'L');
+    this.bindPad(this.padR, 'R');
+
+    var tap = function (id, fn) {
+      var el = document.getElementById(id);
+      el.addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); Sound.unlock(); fn(); });
+    };
+    tap('tArm', function () { hooks.arm(); });
+    tap('tReset', function () { hooks.resetDrone(); });
+    tap('tPause', function () { hooks.pause(); });
+  },
+
+  enable: function () {
+    if (this.enabled) return;
+    this.enabled = true;
+    this.root.hidden = false;
+    Input.hasTouch = true;
+    this.setThrottleMark();
+  },
+
+  bindPad: function (pad, which) {
+    var self = this;
+    pad.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      Sound.unlock();
+      self.enable();
+      if (which === 'L') self.idL = e.pointerId; else self.idR = e.pointerId;
+      pad.setPointerCapture(e.pointerId);
+      pad.classList.add('on');
+      Input.setActive('touch');
+      self.move(pad, which, e);
+    });
+    pad.addEventListener('pointermove', function (e) {
+      if (e.pointerId !== (which === 'L' ? self.idL : self.idR)) return;
+      e.preventDefault();
+      self.move(pad, which, e);
+    });
+    var end = function (e) {
+      if (e.pointerId !== (which === 'L' ? self.idL : self.idR)) return;
+      pad.classList.remove('on');
+      if (which === 'L') {
+        self.idL = null;
+        self.yaw = 0;
+        self.climb = 0;          // camera-mode climb springs back; throttle does not
+        self.thumb(pad, 0, Input.mode && Input.mode.hold ? 0 : (self.thr * 2 - 1) * -1);
+      } else {
+        self.idR = null;
+        self.pitch = 0; self.roll = 0;
+        self.thumb(pad, 0, 0);
+      }
+    };
+    pad.addEventListener('pointerup', end);
+    pad.addEventListener('pointercancel', end);
+  },
+
+  move: function (pad, which, e) {
+    var r = pad.getBoundingClientRect();
+    var nx = clamp(((e.clientX - r.left) / r.width - 0.5) * 2, -1, 1);
+    var ny = clamp(((e.clientY - r.top) / r.height - 0.5) * 2, -1, 1);
+    if (which === 'R') {
+      this.roll = nx;
+      this.pitch = -ny;          // finger up = stick away = nose down = forward
+      this.thumb(pad, nx, ny);
+    } else {
+      this.yaw = nx;
+      if (Input.mode && Input.mode.hold) {
+        this.climb = -ny;        // climb command about the centre
+        this.thumb(pad, nx, ny);
+      } else {
+        this.thr = clamp((1 - (e.clientY - r.top) / r.height), 0, 1);
+        this.thumb(pad, nx, ny);
+        this.setThrottleMark();
+      }
+    }
+  },
+
+  thumb: function (pad, nx, ny) {
+    var i = pad.querySelector('i');
+    i.style.transform = 'translate(' + (nx * 33).toFixed(1) + '%,' + (ny * 33).toFixed(1) + '%)';
+  },
+
+  setThrottleMark: function () {
+    if (this.padL) this.padL.style.setProperty('--thr', ((1 - this.thr) * 100).toFixed(1) + '%');
+  },
+
+  // Hide the sticks whenever a menu is up; the menu is tappable on its own.
+  setVisible: function (v) {
+    if (!this.enabled) return;
+    this.root.hidden = !v;
+  },
+
+  setArmed: function (armed) {
+    var b = document.getElementById('tArm');
+    if (b) { b.classList.toggle('armed', !!armed); b.textContent = armed ? 'DISARM' : 'ARM'; }
   }
 };
 
@@ -2008,6 +2305,18 @@ function start() {
       parts.discs.push(disc);
     });
 
+    // Ducts for the whoop classes: a ring around each disc.
+    parts.ducts = [];
+    arms.forEach(function (a) {
+      var duct = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.012, 8, 20),
+        new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.7 }));
+      duct.rotation.x = Math.PI / 2;
+      duct.position.set(a[0], 0.062, a[1]);
+      duct.visible = false;
+      drone.add(duct);
+      parts.ducts.push(duct);
+    });
+
     // Nav lights: green nose, red tail, white strobes on the arms.
     var nose = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), new THREE.MeshBasicMaterial({ color: 0x224433 }));
     nose.position.set(0, 0.02, -0.16);
@@ -2114,6 +2423,47 @@ function start() {
     pitch: QUAD.Ipitch / (FC.tau.pitch * 4 * QUAD.armM * _dTdm),
     yaw:   QUAD.Iyaw   / (FC.tau.yaw   * 4 * QUAD.propTorqueArm * _dTdm)
   };
+
+  /* Swapping aircraft rewrites QUAD, the loop gains and the pack in place,
+   * then rebuilds everything derived from them. Nothing downstream needs to
+   * know the airframe changed — it just reads the same names it always did. */
+  var AF = AIRFRAMES[0];
+  function recomputeDerived() {
+    MOTORS[0].x =  QUAD.armM; MOTORS[0].z =  QUAD.armM;
+    MOTORS[1].x =  QUAD.armM; MOTORS[1].z = -QUAD.armM;
+    MOTORS[2].x = -QUAD.armM; MOTORS[2].z =  QUAD.armM;
+    MOTORS[3].x = -QUAD.armM; MOTORS[3].z = -QUAD.armM;
+    MOTORS.forEach(function (m) {
+      m.mixRoll = m.x / QUAD.armM;
+      m.mixPitch = -m.z / QUAD.armM;
+      m.mixYaw = m.yawDir;
+    });
+    var dTdm = QUAD.thrustPerMotorN * QUAD.thrustExp *
+               Math.pow(FC.gainThrottleRef, QUAD.thrustExp - 1);
+    KP.roll  = QUAD.Iroll  / (FC.tau.roll  * 4 * QUAD.armM * dTdm);
+    KP.pitch = QUAD.Ipitch / (FC.tau.pitch * 4 * QUAD.armM * dTdm);
+    KP.yaw   = QUAD.Iyaw   / (FC.tau.yaw   * 4 * QUAD.propTorqueArm * dTdm);
+  }
+
+  function applyAirframe(a) {
+    AF = a;
+    var k;
+    for (k in a.quad) if (Object.prototype.hasOwnProperty.call(a.quad, k)) QUAD[k] = a.quad[k];
+    for (k in a.battery) if (Object.prototype.hasOwnProperty.call(a.battery, k)) CFG.battery[k] = a.battery[k];
+    FC.tau.roll = a.fc.roll; FC.tau.pitch = a.fc.pitch; FC.tau.yaw = a.fc.yaw;
+    CFG.groundY = a.groundY;
+    CFG.camTilt = a.camTilt * Math.PI / 180;
+    camTilt = CFG.camTilt;
+    recomputeDerived();
+    // The model is one mesh scaled to the class, with ducts on the two that
+    // have them. A whoop next to a 7" should look like a whoop next to a 7".
+    drone.scale.setScalar(a.modelScale);
+    parts.ducts.forEach(function (d) { d.visible = !!a.ducted; });
+    parts.pod.rotation.x = camTilt;
+    parts.lens.rotation.x = Math.PI / 2 + camTilt;
+    Store.data.airframe = a.id;
+    resetBattery();
+  }
 
   var iTerm = new THREE.Vector3();       // x pitch, y yaw, z roll — motor-range units
   var prevOmega = new THREE.Vector3();
@@ -2588,6 +2938,10 @@ function start() {
       }
       Sound.startFlight();
       hud.pulse = 0;
+      // Ghosts are per course, airframe and mode: a whoop lap and a 7" lap
+      // are not the same race.
+      Ghost.load();
+      if (s.id === 'race' || s.id === 'los') Ghost.startLap(); else Ghost.stop();
     },
 
     // Recovery drill: thrown into the air inverted and spinning, harder each round.
@@ -2694,7 +3048,8 @@ function start() {
       // Time trial / LOS: sequential gates, laps, splits.
       var laps = s.laps || 2;
       this.splits.push(this.t);
-      if (this.lapStart === null) this.lapStart = this.t;
+      if (this.lapStart === null) { this.lapStart = this.t; Ghost.startLap(); }
+      else Ghost.onSplit(this.splits.length - 2, this.t - this.lapStart);
       var n2 = mapSpec.gates.length;
       this.gateIndex = (i + 1) % n2;
 
@@ -2702,6 +3057,9 @@ function start() {
         var lapTime = this.t - this.lapStart;
         this.lapStart = this.t;
         this.lastLap = lapTime;
+        var storedBest = Store.record(this.map.id + '.' + AF.id, this.scenario.id);
+        var isBest = storedBest === undefined || lapTime < storedBest;
+        Ghost.finishLap(lapTime, isBest);
         if (this.bestLap === null || lapTime < this.bestLap) this.bestLap = lapTime;
         this.lap++;
         if (this.lap >= laps) {
@@ -2729,9 +3087,10 @@ function start() {
       if (this.state === 'done') return;
       this.state = 'done';
       st.armed = false;
+      Ghost.stop();
       var best = false;
       if (value !== null && value !== undefined) {
-        best = Store.setRecord(this.map.id, this.scenario.id, value, lowerBetter);
+        best = Store.setRecord(this.map.id + '.' + AF.id, this.scenario.id, value, lowerBetter);
       }
       this.result = { title: title, sub: sub, best: best };
       if (best) Sound.win(); else Sound.fail();
@@ -2780,7 +3139,8 @@ function start() {
       // Its props are below and behind the lens, so they are never in shot.
       var gimbal = Input.mode.hold;
       var armsInView = showArms && !gimbal;
-      var off = _v.set(0, gimbal ? -0.02 : 0.105, armsInView ? -0.10 : -0.34).applyQuaternion(st.quat);
+      var sc = AF.modelScale;
+      var off = _v.set(0, (gimbal ? -0.02 : 0.105) * sc, (armsInView ? -0.10 : -0.34) * sc).applyQuaternion(st.quat);
       camera.position.copy(st.pos).add(off);
       if (gimbal) {
         _euler.set(gimbalTilt, yawOf(st.quat), 0, 'YXZ');
@@ -2800,7 +3160,7 @@ function start() {
       drone.visible = true;
       if (camMode === 'chase') {
         _dq.setFromEuler(new THREE.Euler(0, yawOf(st.quat), 0));
-        var back = _v.set(0, 0.55, 2.5).applyQuaternion(_dq);
+        var back = _v.set(0, 0.55 * AF.modelScale, 2.5 * AF.modelScale).applyQuaternion(_dq);
         var want = back.add(st.pos);
         if (want.y < 0.5) want.y = 0.5;
         if (!chaseInit) { chasePos.copy(want); chaseInit = true; }
@@ -2865,6 +3225,10 @@ function start() {
     var m = Math.max(18, Math.min(w, h) * 0.035);
     var cx = w / 2, cy = h / 2;
     var fpv = camMode === 'fpv';
+    // On-screen sticks own the bottom corners, so the OSD gets out of their
+    // way rather than being drawn underneath them.
+    var padH = Touch.enabled ? Math.min(w * 0.34, 168) + 22 : 0;
+    var bottom = h - m - padH;
 
     _fwd.set(0, 0, -1).applyQuaternion(st.quat);
     _up.set(0, 1, 0).applyQuaternion(st.quat);
@@ -2982,6 +3346,13 @@ function start() {
 
     if (Run.lastLap !== null) T('LAST ' + fmtTime(Run.lastLap), m, m + 52, { size: 11, color: 'rgba(238,242,238,0.7)' });
     if (Run.bestLap !== null) T('BEST ' + fmtTime(Run.bestLap), m, m + 68, { size: 11, color: '#ffb020' });
+    // Split delta against the ghost, shown for a few seconds after each gate.
+    if (Ghost.delta !== null && performance.now() - Ghost.deltaAt < 3000) {
+      var dl = Ghost.delta;
+      T((dl >= 0 ? '+' : '−') + Math.abs(dl).toFixed(2), m, m + 92,
+        { size: 20, weight: 700, font: DISPLAY, color: dl < 0 ? '#7dffb0' : '#ff6b6b' });
+      T('VS BEST', m + (Math.abs(dl) < 10 ? 62 : 74), m + 92, { size: 10, color: 'rgba(238,242,238,0.5)' });
+    }
     if (Run.scenario.id === 'recover' && Run.rec.round > 0) T('ROUNDS ' + Run.rec.round, m, m + 52, { size: 11, color: '#ffb020' });
 
     var obj = Run.objective();
@@ -3001,15 +3372,19 @@ function start() {
     hx.fillRect(bx + 1, by + 1, (bw - 2) * pct, bh - 2);
     T(Math.round(st.mah) + ' MAH  ' + st.amps.toFixed(0) + 'A', w - m, m + 38,
       { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
-    T((Input.active === 'gamepad' ? 'PAD' : 'KBD') + ' · ' + Input.mode.name.toUpperCase() + ' · ' +
+    if (Ghost.playing && Ghost.mesh && Ghost.mesh.visible) {
+      T('GHOST ' + fmtTime(Ghost.best.t), w - m, m + 70, { size: 10.5, align: 'right', color: 'rgba(106,216,255,0.85)' });
+    }
+    T((Input.active === 'gamepad' ? 'PAD' : 'KBD') + ' · ' + AF.name.toUpperCase().replace('″', '"') + ' · ' +
       Input.profile.name.toUpperCase() + ' · ' +
       (Input.idleMode === 'airmode' ? 'AIR' : Input.idleMode === 'idle' ? 'IDLE' : 'MSTOP') + ' · ' +
       (camMode === 'fpv' ? 'FPV' : camMode === 'chase' ? 'CHASE' : 'LOS'),
       w - m, m + 54, { size: 10.5, align: 'right', color: 'rgba(238,242,238,0.6)' });
 
-    // Throttle, bottom left
+    // Throttle, bottom left — the touch pad carries its own throttle mark.
     var tbH = Math.min(150, h * 0.26), tbW = 9;
-    var tbX = m, tbY = h - m - tbH - 20;
+    var tbX = m, tbY = bottom - tbH - 20;
+    if (!Touch.enabled) {
     hx.strokeStyle = 'rgba(238,242,238,0.45)'; hx.lineWidth = 1;
     hx.strokeRect(tbX, tbY, tbW, tbH);
     // Camera mode flies a climb command, so the bar shows what the altitude
@@ -3026,20 +3401,21 @@ function start() {
     if (Input.mode.hold && st.armed && st.holdAlt !== null) {
       T('ALT HOLD ' + st.holdAlt.toFixed(1) + 'M', tbX, tbY - 22, { size: 10, weight: 600, color: '#7dffb0' });
     }
-    if (st.turtling) T('TURTLE', cx, h - m - 24, { size: 12, align: 'center', weight: 600, color: '#ffb020' });
-    T(Math.round(thr * 100) + '%', tbX, h - m - 4, { size: 13, weight: 600 });
+    if (st.turtling) T('TURTLE', cx, bottom - 24, { size: 12, align: 'center', weight: 600, color: '#ffb020' });
+    T(Math.round(thr * 100) + '%', tbX, bottom - 4, { size: 13, weight: 600 });
+    }
 
     // Speed / altitude, bottom right
-    T(speed.toFixed(1), w - m, h - m - 22, { size: 22, align: 'right', weight: 700, font: DISPLAY });
-    T('M/S', w - m, h - m - 6, { size: 10, align: 'right', color: 'rgba(238,242,238,0.55)' });
-    T('ALT ' + st.pos.y.toFixed(1) + 'M', w - m - 76, h - m - 6, { size: 11, align: 'right', color: 'rgba(238,242,238,0.75)' });
+    T(speed.toFixed(1), w - m, bottom - 22, { size: 22, align: 'right', weight: 700, font: DISPLAY });
+    T('M/S', w - m, bottom - 6, { size: 10, align: 'right', color: 'rgba(238,242,238,0.55)' });
+    T('ALT ' + st.pos.y.toFixed(1) + 'M', w - m - 76, bottom - 6, { size: 11, align: 'right', color: 'rgba(238,242,238,0.75)' });
 
     // Arm state, bottom centre
     if (!st.armed && Run.state !== 'done') {
       var blink = Math.sin(hud.blink * 5) > -0.3;
-      if (blink) T('DISARMED', cx, h - m - 6, { size: 13, align: 'center', weight: 600, color: '#ff4d4d' });
-    } else if (st.armed) {
-      T('ARMED', cx, h - m - 6, { size: 12, align: 'center', weight: 600, color: 'rgba(255,77,77,0.85)' });
+      if (blink && !Touch.enabled) T('DISARMED', cx, bottom - 6, { size: 13, align: 'center', weight: 600, color: '#ff4d4d' });
+    } else if (st.armed && !Touch.enabled) {
+      T('ARMED', cx, bottom - 6, { size: 12, align: 'center', weight: 600, color: 'rgba(255,77,77,0.85)' });
     }
 
     /* --- next gate director --- */
@@ -3088,7 +3464,7 @@ function start() {
     }
     if (hud.restartArm > 0) {
       hud.restartArm -= dt;
-      T('PRESS AGAIN TO RESTART', cx, h - m - 28, { size: 12, align: 'center', weight: 600, color: '#ffb020' });
+      T('PRESS AGAIN TO RESTART', cx, bottom - 28, { size: 12, align: 'center', weight: 600, color: '#ffb020' });
     }
   }
 
@@ -3105,7 +3481,7 @@ function start() {
   var hintEl = document.getElementById('hint');
   var hintTimer = null, hintOn = true;
   function renderHint() {
-    if (!hintOn) { hintEl.classList.add('gone'); return; }
+    if (!hintOn || Input.active === 'touch') { hintEl.classList.add('gone'); return; }
     hintEl.innerHTML = Input.bindings('flight').map(function (b) {
       return '<span><b>' + b[0] + '</b>' + b[1] + '</span>';
     }).join('');
@@ -3146,7 +3522,7 @@ function start() {
       function () { return 'Who made this.'; }),
 
     // --- play ---
-    mode: valueRow('mode', 'Mode',
+    mode: valueRow('mode', 'Session',
       function () { return Menu.scenario().name; },
       function (d) { Menu.stepList(Menu.sessions(), 'idxSession', d); },
       function () { return '<b>' + Menu.scenario().name + '</b> — ' + Menu.scenario().desc; }),
@@ -3154,7 +3530,15 @@ function start() {
       function () { return Menu.mapSel().name; },
       function (d) { Menu.stepList(MAPS, 'idxMap', d); },
       function () { return '<b>' + Menu.mapSel().name + '</b> — ' + Menu.mapSel().desc; }),
-    drone: valueRow('drone', 'Drone',
+    airframe: valueRow('airframe', 'Drone',
+      function () { return AF.name; },
+      function (d) {
+        var i = AIRFRAMES.indexOf(AF);
+        applyAirframe(AIRFRAMES[(i + d + AIRFRAMES.length) % AIRFRAMES.length]);
+        Store.save();
+      },
+      function () { return '<b>' + AF.name + '</b> — ' + AF.desc; }),
+    drone: valueRow('drone', 'Flight mode',
       function () { return Input.mode.name; },
       function (d) {
         var i = FLIGHT_MODES.indexOf(Input.mode);
@@ -3164,7 +3548,7 @@ function start() {
       },
       function () { return '<b>' + Input.mode.name + '</b> — ' + Input.mode.desc; }),
     launch: actionRow('launch', '', 'Launch ▸', function () { Menu.launch(); },
-      function () { return 'Fly ' + Menu.scenario().name + ' at ' + Menu.mapSel().name + ' on the ' + Input.mode.name + ' airframe.'; }),
+      function () { return 'Fly ' + Menu.scenario().name + ' at ' + Menu.mapSel().name + ' on the ' + AF.name + ', in ' + Input.mode.name + ' mode.'; }),
 
     // --- options ---
     sound: valueRow('sound', 'Sound',
@@ -3243,7 +3627,7 @@ function start() {
 
   var PAGES = {
     main:    { title: '', rows: ['play', 'options', 'help', 'credits'] },
-    play:    { title: 'Play', rows: ['mode', 'place', 'drone', 'launch', 'back'] },
+    play:    { title: 'Play', rows: ['mode', 'place', 'airframe', 'drone', 'launch', 'back'] },
     options: { title: 'Options', rows: ['sound', 'volume', 'quality', 'rates', 'idle', 'prop', 'throttle', 'pitchdir', 'back'] },
     help:    { title: 'Help', content: 'help' },
     credits: { title: 'Credits', content: 'credits' }
@@ -3311,6 +3695,7 @@ function start() {
       var rp = RATE_PROFILES.filter(function (x) { return x.id === Store.data.rates; })[0];
       if (rp) Input.profile = rp;
       Input.mode = flightModeById(Store.data.flightMode);
+      applyAirframe(airframeById(Store.data.airframe));
       Input.invertPitch = !!Store.data.invertPitch;
       if (IDLE_MODES.indexOf(Store.data.idleMode) >= 0) Input.idleMode = Store.data.idleMode;
       GFX = gfxById(Store.data.gfx);
@@ -3426,14 +3811,15 @@ function start() {
       document.getElementById('briefdesc').innerHTML = brief;
 
       document.getElementById('m-meta').innerHTML =
-        Input.mode.name.toUpperCase() + ' &middot; <b>' + Input.profile.name.toUpperCase() + '</b> RATES &middot; 4S 1300' +
+        AF.name.toUpperCase() + ' &middot; <b>' + Input.profile.name.toUpperCase() + '</b> RATES &middot; ' +
+        CFG.battery.cells + 'S ' + CFG.battery.capacity +
         (Input.mode.selfLevel ? ' &middot; SELF-LEVELLING' : ' &middot; NO SELF-LEVEL');
 
       // The record only means something once a session and place are picked.
       var box = document.getElementById('briefrecord');
       if (this.page === 'play') {
         var sc = this.scenario(), mp = this.mapSel();
-        var rec = Store.record(mp.id, sc.id);
+        var rec = Store.record(mp.id + '.' + AF.id, sc.id);
         var label = sc.id === 'rush' ? 'Most gates' : sc.id === 'recover' ? 'Best rounds' : sc.id === 'free' ? '' : 'Best lap';
         box.innerHTML = !label ? '' : label + '<span class="t"' + (rec === undefined ? ' style="color:var(--ink-faint)"' : '') + '>' +
           (rec === undefined ? 'not set' : (sc.id === 'rush' || sc.id === 'recover' ? rec : fmtTime(rec))) + '</span>';
@@ -3446,7 +3832,8 @@ function start() {
       }).join('');
       var dev = document.getElementById('devbadge');
       dev.classList.toggle('pad', Input.active === 'gamepad');
-      dev.querySelector('b').textContent = Input.active === 'gamepad'
+      dev.classList.toggle('touch', Input.active === 'touch');
+      dev.querySelector('b').textContent = Input.active === 'touch' ? 'Touch' : Input.active === 'gamepad'
         ? (Input.padName ? Input.padName.replace(/\s*\(.*\)\s*/, '').slice(0, 24) || 'Gamepad' : 'Gamepad')
         : 'Keyboard';
     },
@@ -3506,6 +3893,13 @@ function start() {
   var PAUSE_ROWS = [
     { label: 'Resume', value: null, act: function () { Pause.close(); } },
     { label: 'Restart run', value: null, act: function () { Pause.close(); Run.restart(); } },
+    { label: 'Drone', value: function () { return AF.name; }, act: function () {
+        var i = AIRFRAMES.indexOf(AF);
+        applyAirframe(AIRFRAMES[(i + 1) % AIRFRAMES.length]);
+        Store.save();
+        placeAtSpawn();
+        Pause.render();
+      } },
     { label: 'Flight mode', value: function () { return Input.mode.name; }, act: function () {
         var i = FLIGHT_MODES.indexOf(Input.mode);
         Input.mode = FLIGHT_MODES[(i + 1) % FLIGHT_MODES.length];
@@ -3697,6 +4091,8 @@ function start() {
     isArmed: function () { return st.armed; }
   });
 
+  Touch.init(Input.hooks);
+
   /* ================= RESIZE ================= */
   function applyGfx(rebuild) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX.dpr));
@@ -3725,6 +4121,125 @@ function start() {
   }
   window.addEventListener('resize', resize);
   resize();
+
+  /* ================= GHOST =================
+   * A lap is recorded as position and attitude at a fixed rate, and the best
+   * one for this course, airframe and mode is played back beside you. Gate
+   * splits ride along with it, so the delta shown is a real comparison at a
+   * real point on the track rather than a guess from elapsed time. */
+  var GHOST_HZ = 30;
+  var GHOST_MAX_S = 120;
+
+  var Ghost = {
+    rec: null, recT: 0, recSplits: null,
+    best: null,                 // { t, splits, d } loaded from storage
+    mesh: null, playing: false, delta: null, deltaAt: 0,
+
+    key: function () {
+      return Run.map.id + '.' + Run.scenario.id + '.' + AF.id + '.' + Input.mode.id;
+    },
+
+    build: function () {
+      if (this.mesh) return;
+      // Deliberately not a copy of the quad: a ghost should read as a ghost
+      // at a glance, never be mistaken for the aircraft you are flying.
+      var g = new THREE.Group();
+      var mat = new THREE.MeshBasicMaterial({ color: 0x6ad8ff, transparent: true, opacity: 0.32, depthWrite: false });
+      var body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.30), mat);
+      g.add(body);
+      [[0.19, 0.19], [-0.19, 0.19], [-0.19, -0.19], [0.19, -0.19]].forEach(function (a) {
+        var disc = new THREE.Mesh(new THREE.CircleGeometry(0.066, 16), mat);
+        disc.rotation.x = -Math.PI / 2;
+        disc.position.set(a[0], 0.06, a[1]);
+        g.add(disc);
+        var arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.012, 0.26), mat);
+        arm.position.set(a[0] / 2, 0, a[1] / 2);
+        arm.rotation.y = Math.atan2(a[0], a[1]);
+        g.add(arm);
+      });
+      g.visible = false;
+      scene.add(g);
+      this.mesh = g;
+    },
+
+    load: function () {
+      this.build();
+      var all = Store.data.ghosts || {};
+      this.best = all[this.key()] || null;
+      this.mesh.scale.setScalar(AF.modelScale);
+      this.mesh.visible = false;
+      this.playing = false;
+      this.delta = null;
+    },
+
+    startLap: function () {
+      this.rec = [];
+      this.recSplits = [];
+      this.recT = 0;
+      this.playing = !!(this.best && this.best.d && this.best.d.length);
+      this.delta = null;
+    },
+
+    // Called from the frame loop with the time since the lap began.
+    sample: function (dt, lapTime) {
+      if (!this.rec) return;
+      this.recT += dt;
+      var want = Math.floor(lapTime * GHOST_HZ);
+      if (want >= this.rec.length / 7 && lapTime < GHOST_MAX_S) {
+        var q = st.quat;
+        this.rec.push(
+          Math.round(st.pos.x * 100) / 100, Math.round(st.pos.y * 100) / 100, Math.round(st.pos.z * 100) / 100,
+          Math.round(q.x * 1000) / 1000, Math.round(q.y * 1000) / 1000,
+          Math.round(q.z * 1000) / 1000, Math.round(q.w * 1000) / 1000);
+      }
+      if (this.playing) this.play(lapTime);
+    },
+
+    play: function (lapTime) {
+      var d = this.best.d, n = d.length / 7;
+      if (!n) return;
+      var f = lapTime * GHOST_HZ;
+      if (f >= n - 1) { this.mesh.visible = false; return; }
+      var i = Math.floor(f), fr = f - i, a = i * 7, b = (i + 1) * 7;
+      this.mesh.visible = true;
+      this.mesh.position.set(
+        d[a] + (d[b] - d[a]) * fr,
+        d[a + 1] + (d[b + 1] - d[a + 1]) * fr,
+        d[a + 2] + (d[b + 2] - d[a + 2]) * fr);
+      _gq1.set(d[a + 3], d[a + 4], d[a + 5], d[a + 6]);
+      _gq2.set(d[b + 3], d[b + 4], d[b + 5], d[b + 6]);
+      _gq1.slerp(_gq2, fr);
+      this.mesh.quaternion.copy(_gq1);
+    },
+
+    // A split is the only honest place to compare two laps.
+    onSplit: function (index, lapTime) {
+      if (this.recSplits) this.recSplits.push(Math.round(lapTime * 1000) / 1000);
+      if (this.best && this.best.splits && this.best.splits.length > index) {
+        this.delta = lapTime - this.best.splits[index];
+        this.deltaAt = performance.now();
+      }
+    },
+
+    finishLap: function (lapTime, isBest) {
+      if (isBest && this.rec && this.rec.length > 14) {
+        var all = Store.data.ghosts || (Store.data.ghosts = {});
+        all[this.key()] = { t: lapTime, splits: this.recSplits, d: this.rec, savedAt: Date.now() };
+        Store.pruneGhosts(6);
+        if (Store.save()) this.best = all[this.key()];
+        else this.best = null;     // storage was full; fly on without one
+      }
+      this.startLap();
+    },
+
+    stop: function () {
+      this.rec = null;
+      this.playing = false;
+      this.delta = null;
+      if (this.mesh) this.mesh.visible = false;
+    }
+  };
+  var _gq1 = new THREE.Quaternion(), _gq2 = new THREE.Quaternion();
 
   /* ================= SHOWCASE (behind the menu) =================
    * The right of the menu is a live flight, not a video: the same renderer,
@@ -3933,6 +4448,7 @@ function start() {
   var acc = 0;
   var FIXED = 1 / 240;
   var propSpin = 0;
+  var lastTouchArmed = null;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -3942,6 +4458,7 @@ function start() {
     last = now;
 
     var menuing = inMenu();
+    Touch.setVisible(!menuing);
     Input.update(dt, menuing);
 
     if (menuing) {
@@ -3986,6 +4503,8 @@ function start() {
     if (steps === 64) acc = 0;
     Run.update(dt);
 
+    if (Run.state === 'live' && Run.lapStart !== null) Ghost.sample(dt, Run.t - Run.lapStart);
+
     drone.position.copy(st.pos);
     drone.quaternion.copy(st.quat);
 
@@ -4021,6 +4540,8 @@ function start() {
       }
     });
 
+    if (st.armed !== lastTouchArmed) { lastTouchArmed = st.armed; Touch.setArmed(st.armed); }
+
     updateCamera(dt);
     Sound.flight(st.motor, Math.min(st.omega.length() / 8, 1), st.vel.length(), st.armed);
 
@@ -4045,11 +4566,14 @@ function start() {
   requestAnimationFrame(frame);
 
   window.__cam = camera;
+  window.__touch = Touch;
   window.__sim = { st: st, Run: Run, Menu: Menu, Pause: Pause, Input: Input, cfg: CFG, Demo: Demo,
     gfx: function () { return GFX; }, modes: FLIGHT_MODES,
     spec: function () { return mapSpec; }, cam: function () { return camMode; }, Sound: Sound,
     // Exposed so the flight model can be measured rather than taken on trust.
     tilt: function () { return Input.mode.hold ? gimbalTilt : camTilt; },
+    Ghost: Ghost, airframes: AIRFRAMES, af: function () { return AF; },
+    applyAirframe: applyAirframe,
     quad: QUAD, fc: FC, motors: MOTORS, kp: KP, profiles: RATE_PROFILES, bfRate: bfRate,
     step: function (dt) { stepPhysics(dt); }, zeroFC: zeroMotors };
 }

@@ -14,7 +14,7 @@ xdg-open index.html      # Linux
 The sim is **acro (rate) mode**: the sticks command angular *rates*, not angles,
 and the quad holds whatever attitude you leave it in. Nothing self-levels.
 
-Keyboard and gamepad are fully interchangeable and neither is required. A gamepad
+Keyboard, gamepad and touch are fully interchangeable and none is required. A gamepad
 takes over the moment you move a stick or press a button; touching the keyboard
 hands control straight back. Only the active device's bindings are ever shown on
 screen.
@@ -60,6 +60,33 @@ Pitch stick row in the menu inverts it.
 Arming is blocked above 12% throttle, the same check a real flight controller
 does, and every run starts at idle.
 
+## Airframes
+
+Four aircraft, each a complete set of the constants the model already runs on,
+so the difference between them is physics rather than a multiplier. Swappable
+from the Play page or mid-flight from the pause screen; the loop gains, mixer
+geometry and pack are all rebuilt with the airframe.
+
+| | Mass | Thrust/weight | Hover | Pack | Feels like |
+| --- | --- | --- | --- | --- | --- |
+| 5″ Freestyle | 650 g | 6.5:1 | 25% | 4S 1300 | The default; everything else is measured against it |
+| Tinywhoop | 35 g | 3.5:1 | 39% | 2S 450 | Ducted, near-zero inertia, stops instantly, slow |
+| Cinewhoop | 550 g | 4.4:1 | 33% | 4S 1100 | Heavy and draggy on purpose; refuses to be twitchy |
+| 7″ Long range | 1.15 kg | 4.9:1 | 31% | 6S 3000 | Carries momentum into every corner, flies for ten minutes |
+
+Records and ghosts are kept per airframe, because a whoop lap and a 7″ lap are
+not the same race.
+
+## Ghost replay
+
+Time Trial and Line of Sight record each lap — position and attitude at 30 Hz,
+with the gate splits alongside — and play the best one back beside you as a
+translucent aircraft. The split delta shown after each gate is a real
+comparison at a real point on the track, not a guess from elapsed time. Ghosts
+are stored per course, airframe and flight mode, capped at six, and are the
+first thing dropped if browser storage fills, so they can never cost you your
+settings or records.
+
 ## Flight modes
 
 Betaflight flies one mode at a time, picked from an AUX switch. All three are here:
@@ -87,6 +114,18 @@ level however hard the aircraft banks and only yaw follows the airframe. In
 Camera mode the shoulder buttons drive the gimbal wheel in flight (−90° to +20°),
 the HUD horizon stops rolling because the lens no longer does, and the props are
 never in shot — the gimbal hangs below them.
+
+### Touch
+
+On-screen sticks appear the moment you touch the screen. The right pad is a
+self-centring gimbal. The left pad is not: its vertical axis is an absolute
+throttle that stays where you lift your thumb off, because a spring-centred
+throttle is the one thing no transmitter has — in Camera mode it does spring
+back, since there the stick is a climb command about its centre. The OSD moves
+out of the pads' way when they are up.
+
+Honestly: acro on a touchscreen is hard. Camera mode is the one that actually
+plays well with thumbs.
 
 ## Rate profiles
 
